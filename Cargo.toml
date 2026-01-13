@@ -1,0 +1,16 @@
+[package]
+name = "vidwall"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+
+[dependencies]
+gpui = "0.2"
+gpui-video-player = "0.1"
+rand = "0.8"
+url = "2"
+walkdir = "2"
+
+[profile.release]
+opt-level = 3
+lto = true
