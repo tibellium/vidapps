@@ -1,15 +1,17 @@
 use std::path::Path;
 use std::ptr;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use ffmpeg_next::ffi;
 use ffmpeg_next::format::input;
 use ffmpeg_next::media::Type;
-use ffmpeg_next::software::scaling::{context::Context as ScalerContext, flag::Flags as ScalerFlags};
+use ffmpeg_next::software::scaling::{
+    context::Context as ScalerContext, flag::Flags as ScalerFlags,
+};
 use ffmpeg_next::util::frame::video::Video as VideoFrameFFmpeg;
-use ffmpeg_next::{codec, Rational};
+use ffmpeg_next::{Rational, codec};
 
 use super::frame::VideoFrame;
 use super::queue::FrameQueue;
@@ -17,8 +19,8 @@ use super::queue::FrameQueue;
 /// Error type for video decoding operations
 #[derive(Debug)]
 pub enum DecoderError {
-    Ffmpeg(ffmpeg_next::Error),
     NoVideoStream,
+    Ffmpeg(ffmpeg_next::Error),
     Io(std::io::Error),
 }
 
@@ -308,6 +310,9 @@ pub fn decode_video<P: AsRef<Path>>(
             ffi::av_buffer_unref(&mut (hw_ctx as *mut _));
         }
     }
+
+    // Signal that decoding is complete
+    queue.close();
 
     Ok(())
 }
