@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use gpui::RenderImage;
 use image::{Frame, RgbaImage};
 
-use super::decoder::{decode_video, get_video_info, DecoderError};
+use super::decoder::{DecoderError, decode_video, get_video_info};
 use super::frame::VideoFrame;
 use super::queue::FrameQueue;
 
@@ -29,13 +29,13 @@ pub struct VideoPlayer {
     decoder_handle: Option<JoinHandle<Result<(), DecoderError>>>,
     start_time: Instant,
     current_frame: Mutex<Option<VideoFrame>>,
-    next_frame: Mutex<Option<VideoFrame>>,  // Buffered frame waiting for its PTS
-    base_pts: Mutex<Option<Duration>>,       // PTS of the first frame (used as offset)
+    next_frame: Mutex<Option<VideoFrame>>, // Buffered frame waiting for its PTS
+    base_pts: Mutex<Option<Duration>>,     // PTS of the first frame (used as offset)
     duration: Duration,
     state: Mutex<PlaybackState>,
     // Cached render image - only recreated when frame changes
     cached_render_image: Mutex<Option<Arc<RenderImage>>>,
-    frame_generation: AtomicU64,  // Incremented each time frame changes
+    frame_generation: AtomicU64, // Incremented each time frame changes
 }
 
 impl VideoPlayer {
@@ -140,7 +140,9 @@ impl VideoPlayer {
             }
         }
 
-        // Check if the buffered frame should be displayed now
+        // Advance to the next frame if its PTS has passed
+        // Only advance one frame per render to ensure smooth playback
+        // (aggressive catch-up causes visible frame skipping on VFR videos)
         if let Some(ref frame) = *next {
             let base = base_pts.unwrap_or(Duration::ZERO);
             let relative_pts = frame.pts.saturating_sub(base);
@@ -151,7 +153,7 @@ impl VideoPlayer {
                 frame_changed = true;
                 self.frame_generation.fetch_add(1, Ordering::Relaxed);
 
-                // Try to get the next frame ready
+                // Pre-fetch the next frame
                 *next = self.queue.try_pop();
             }
         }
