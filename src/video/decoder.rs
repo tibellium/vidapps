@@ -1,8 +1,10 @@
 use std::path::Path;
+use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use ffmpeg_next::ffi;
 use ffmpeg_next::format::input;
 use ffmpeg_next::media::Type;
 use ffmpeg_next::software::scaling::{context::Context as ScalerContext, flag::Flags as ScalerFlags};
@@ -98,6 +100,52 @@ fn pts_to_duration(pts: i64, time_base: Rational) -> Duration {
     Duration::from_secs_f64(seconds.max(0.0))
 }
 
+/// Create a VideoToolbox hardware device context (macOS only)
+#[cfg(target_os = "macos")]
+fn create_hw_device_ctx() -> Option<*mut ffi::AVBufferRef> {
+    unsafe {
+        let mut hw_device_ctx: *mut ffi::AVBufferRef = ptr::null_mut();
+        let ret = ffi::av_hwdevice_ctx_create(
+            &mut hw_device_ctx,
+            ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+            ptr::null(),
+            ptr::null_mut(),
+            0,
+        );
+        if ret < 0 {
+            eprintln!("Failed to create VideoToolbox device context: {}", ret);
+            return None;
+        }
+        Some(hw_device_ctx)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn create_hw_device_ctx() -> Option<*mut ffi::AVBufferRef> {
+    None
+}
+
+/// Check if a frame is in hardware format and needs transfer
+fn is_hw_frame(frame: &VideoFrameFFmpeg) -> bool {
+    let format = unsafe { (*frame.as_ptr()).format };
+    // VideoToolbox uses AV_PIX_FMT_VIDEOTOOLBOX
+    format == ffi::AVPixelFormat::AV_PIX_FMT_VIDEOTOOLBOX as i32
+}
+
+/// Transfer hardware frame to software frame
+fn transfer_hw_frame(hw_frame: &VideoFrameFFmpeg) -> Result<VideoFrameFFmpeg, DecoderError> {
+    unsafe {
+        let mut sw_frame = VideoFrameFFmpeg::empty();
+        let ret = ffi::av_hwframe_transfer_data(sw_frame.as_mut_ptr(), hw_frame.as_ptr(), 0);
+        if ret < 0 {
+            return Err(DecoderError::Ffmpeg(ffmpeg_next::Error::from(ret)));
+        }
+        // Copy timing info
+        (*sw_frame.as_mut_ptr()).pts = (*hw_frame.as_ptr()).pts;
+        Ok(sw_frame)
+    }
+}
+
 /// Decode a video file, pushing frames to the queue until stopped or EOF
 pub fn decode_video<P: AsRef<Path>>(
     path: P,
@@ -124,6 +172,17 @@ pub fn decode_video<P: AsRef<Path>>(
     let decoder_ctx = codec::context::Context::from_parameters(codec_params)?;
     let mut decoder = decoder_ctx.decoder().video()?;
 
+    // Try to enable hardware acceleration
+    let hw_device_ctx = create_hw_device_ctx();
+    if let Some(hw_ctx) = hw_device_ctx {
+        unsafe {
+            (*decoder.as_mut_ptr()).hw_device_ctx = ffi::av_buffer_ref(hw_ctx);
+        }
+        eprintln!("VideoToolbox hardware acceleration enabled");
+    } else {
+        eprintln!("Using software decoding");
+    }
+
     let mut scaler: Option<ScalerContext> = None;
     let mut decoded_frame = VideoFrameFFmpeg::empty();
     let mut bgra_frame = VideoFrameFFmpeg::empty();
@@ -146,11 +205,21 @@ pub fn decode_video<P: AsRef<Path>>(
                 break;
             }
 
+            // If this is a hardware frame, transfer to software
+            let sw_frame = if is_hw_frame(&decoded_frame) {
+                transfer_hw_frame(&decoded_frame)?
+            } else {
+                // For software frames, we need to copy the data
+                let mut copy = VideoFrameFFmpeg::empty();
+                copy.clone_from(&decoded_frame);
+                copy
+            };
+
             // Initialize scaler on first frame
             if scaler.is_none() {
-                let src_width = decoded_frame.width();
-                let src_height = decoded_frame.height();
-                let src_format = decoded_frame.format();
+                let src_width = sw_frame.width();
+                let src_height = sw_frame.height();
+                let src_format = sw_frame.format();
 
                 let dst_width = target_width.unwrap_or(src_width);
                 let dst_height = target_height.unwrap_or(src_height);
@@ -168,13 +237,13 @@ pub fn decode_video<P: AsRef<Path>>(
 
             // Scale/convert to BGRA (native format for GPUI)
             let scaler = scaler.as_mut().unwrap();
-            scaler.run(&decoded_frame, &mut bgra_frame)?;
+            scaler.run(&sw_frame, &mut bgra_frame)?;
 
             let dst_width = bgra_frame.width();
             let dst_height = bgra_frame.height();
             let data = bgra_frame.data(0);
             let stride = bgra_frame.stride(0);
-            let pts = pts_to_duration(decoded_frame.pts().unwrap_or(0), time_base);
+            let pts = pts_to_duration(sw_frame.pts().unwrap_or(0), time_base);
 
             // Copy data accounting for stride (already in BGRA format for GPUI)
             let mut bgra_data = Vec::with_capacity((dst_width * dst_height * 4) as usize);
@@ -201,14 +270,23 @@ pub fn decode_video<P: AsRef<Path>>(
             break;
         }
 
+        // If this is a hardware frame, transfer to software
+        let sw_frame = if is_hw_frame(&decoded_frame) {
+            transfer_hw_frame(&decoded_frame)?
+        } else {
+            let mut copy = VideoFrameFFmpeg::empty();
+            copy.clone_from(&decoded_frame);
+            copy
+        };
+
         if let Some(ref mut scaler) = scaler {
-            scaler.run(&decoded_frame, &mut bgra_frame)?;
+            scaler.run(&sw_frame, &mut bgra_frame)?;
 
             let dst_width = bgra_frame.width();
             let dst_height = bgra_frame.height();
             let data = bgra_frame.data(0);
             let stride = bgra_frame.stride(0);
-            let pts = pts_to_duration(decoded_frame.pts().unwrap_or(0), time_base);
+            let pts = pts_to_duration(sw_frame.pts().unwrap_or(0), time_base);
 
             let mut bgra_data = Vec::with_capacity((dst_width * dst_height * 4) as usize);
             for y in 0..dst_height as usize {
@@ -219,8 +297,15 @@ pub fn decode_video<P: AsRef<Path>>(
 
             let frame = VideoFrame::new(bgra_data, dst_width, dst_height, pts);
             if !queue.push(frame) {
-                return Ok(());
+                break;
             }
+        }
+    }
+
+    // Clean up hardware device context
+    if let Some(hw_ctx) = hw_device_ctx {
+        unsafe {
+            ffi::av_buffer_unref(&mut (hw_ctx as *mut _));
         }
     }
 
