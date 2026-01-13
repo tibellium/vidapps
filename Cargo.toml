@@ -6,9 +6,9 @@ rust-version = "1.85"
 
 [dependencies]
 gpui = "0.2"
-gpui-video-player = "0.1"
+ffmpeg-next = "8"
+image = "0.25"
 rand = "0.8"
-url = "2"
 walkdir = "2"
 
 [profile.release]
