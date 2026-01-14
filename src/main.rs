@@ -4,6 +4,12 @@
     Opens a folder, finds all videos, and plays 4 random videos in a grid.
     When a video ends, it's replaced with a new random video from the folder.
 
+    Keyboard Controls:
+    - Space: Pause/Resume all videos
+    - M: Mute/Unmute audio
+    - Up/Down: Adjust volume
+    - Q: Quit
+
     Prerequisites:
     - FFmpeg: `brew install ffmpeg`
 
@@ -26,7 +32,7 @@ mod ui;
 
 use audio::{AudioMixer, AudioOutput, DEFAULT_CHANNELS, DEFAULT_SAMPLE_RATE};
 use playback::VideoPlayer;
-use ui::VideoGridView;
+use ui::{AppState, RootView, register_shortcuts};
 
 // Supported video extensions
 const VIDEO_EXTENSIONS: &[&str] = &[
@@ -37,9 +43,7 @@ const VIDEO_EXTENSIONS: &[&str] = &[
 const DEFAULT_WIDTH: u32 = 1280;
 const DEFAULT_HEIGHT: u32 = 720;
 
-/**
-    Recursively scan a directory for video files
-*/
+/// Recursively scan a directory for video files
 fn scan_for_videos(folder: &PathBuf) -> Vec<PathBuf> {
     WalkDir::new(folder)
         .follow_links(true)
@@ -57,9 +61,7 @@ fn scan_for_videos(folder: &PathBuf) -> Vec<PathBuf> {
         .collect()
 }
 
-/**
-    Pick n random videos from the list (with repetition if fewer than n videos)
-*/
+/// Pick n random videos from the list (with repetition if fewer than n videos)
 fn pick_random_videos(videos: &[PathBuf], n: usize) -> Vec<PathBuf> {
     let mut rng = rand::thread_rng();
 
@@ -74,6 +76,9 @@ fn pick_random_videos(videos: &[PathBuf], n: usize) -> Vec<PathBuf> {
 
 fn main() {
     Application::new().run(|cx: &mut App| {
+        // Register keyboard shortcuts at the app level
+        register_shortcuts(cx);
+
         let folder_path: Option<PathBuf> = std::env::args().nth(1).map(PathBuf::from);
 
         if let Some(path) = folder_path {
@@ -113,7 +118,7 @@ fn open_grid_with_folder(folder: PathBuf, cx: &mut App) {
 
     println!("Found {} videos in {:?}", all_videos.len(), folder);
 
-    // Initialize audio mixer (output created later to avoid premature drop)
+    // Initialize audio mixer
     let mixer = Arc::new(AudioMixer::new(DEFAULT_SAMPLE_RATE, DEFAULT_CHANNELS));
 
     // Pick initial 4 random videos
@@ -127,7 +132,7 @@ fn open_grid_with_folder(folder: PathBuf, cx: &mut App) {
         );
     }
 
-    // Create VideoPlayer instances (decode at native resolution for quality)
+    // Create VideoPlayer instances
     let players: Result<Vec<Arc<VideoPlayer>>, _> = selected
         .iter()
         .map(|path| VideoPlayer::with_options(path, None, None).map(Arc::new))
@@ -150,10 +155,13 @@ fn open_grid_with_folder(folder: PathBuf, cx: &mut App) {
         }
     }
 
-    let players_array: [Arc<VideoPlayer>; 4] = match players.try_into() {
+    let players_array: [Arc<VideoPlayer>; 4] = match players.clone().try_into() {
         Ok(arr) => arr,
         Err(_) => panic!("Should have exactly 4 players"),
     };
+
+    // Set up global application state (includes players for pause/resume)
+    cx.set_global(AppState::new(all_videos, Arc::clone(&mixer), players));
 
     let folder_name = folder
         .file_name()
@@ -167,7 +175,6 @@ fn open_grid_with_folder(folder: PathBuf, cx: &mut App) {
     );
 
     // Store audio output in a Box::leak to keep it alive for app lifetime
-    // (The Stream must not be dropped or audio stops)
     let audio_output = match AudioOutput::new(Arc::clone(&mixer)) {
         Ok(output) => {
             eprintln!(
@@ -182,7 +189,7 @@ fn open_grid_with_folder(folder: PathBuf, cx: &mut App) {
             None
         }
     };
-    // Leak the audio output to keep it alive - it will live for the entire app lifetime
+    // Leak the audio output to keep it alive
     if let Some(output) = audio_output {
         Box::leak(output);
     }
@@ -199,9 +206,16 @@ fn open_grid_with_folder(folder: PathBuf, cx: &mut App) {
             }),
             ..Default::default()
         },
-        |_, cx| cx.new(|cx| VideoGridView::new(players_array, all_videos, Arc::clone(&mixer), cx)),
+        |_, cx| cx.new(|cx| RootView::new(players_array, cx)),
     )
     .expect("Failed to open window");
 
     cx.activate(true);
+
+    println!("\nKeyboard shortcuts:");
+    println!("  Space - Pause/Resume");
+    println!("  M     - Mute/Unmute");
+    println!("  Up    - Volume up");
+    println!("  Down  - Volume down");
+    println!("  Q     - Quit");
 }

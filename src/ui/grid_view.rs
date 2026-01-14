@@ -1,132 +1,151 @@
-use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
-use gpui::{AsyncApp, Context, WeakEntity, Window, div, prelude::*, rgb};
+use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, rgb};
 use rand::seq::SliceRandom;
 
-use crate::audio::AudioMixer;
 use crate::playback::VideoPlayer;
 
+use super::app_state::AppState;
 use super::video_element::video_element;
+use super::video_slot::{VideoEnded, VideoSlot};
 
-const POLL_INTERVAL: Duration = Duration::from_millis(100);
-
-/**
-    The main view holding our 4 video players in a 2x2 grid
-*/
-pub struct VideoGridView {
-    players: [Arc<VideoPlayer>; 4],
-    all_video_paths: Vec<PathBuf>,
-    mixer: Arc<AudioMixer>,
+/// The main grid view that displays 4 videos in a 2x2 layout.
+///
+/// Uses VideoSlot entities for each video position and subscribes to their
+/// VideoEnded events for automatic video replacement.
+pub struct GridView {
+    slots: [Entity<VideoSlot>; 4],
 }
 
-impl VideoGridView {
-    pub fn new(
-        players: [Arc<VideoPlayer>; 4],
-        all_video_paths: Vec<PathBuf>,
-        mixer: Arc<AudioMixer>,
+impl GridView {
+    /// Create a new grid view with the given initial players.
+    pub fn new(players: [Arc<VideoPlayer>; 4], cx: &mut Context<Self>) -> Self {
+        // Create VideoSlot entities for each player
+        let slots: [Entity<VideoSlot>; 4] = players
+            .into_iter()
+            .enumerate()
+            .map(|(index, player)| {
+                let slot = cx.new(|cx| VideoSlot::new(player, index, cx));
+
+                // Subscribe to VideoEnded events from this slot
+                cx.subscribe(&slot, Self::on_video_ended).detach();
+
+                slot
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .expect("Should have exactly 4 slots");
+
+        Self { slots }
+    }
+
+    /// Handle VideoEnded event from a slot - replace the video.
+    fn on_video_ended(
+        &mut self,
+        slot: Entity<VideoSlot>,
+        _event: &VideoEnded,
         cx: &mut Context<Self>,
-    ) -> Self {
-        // Start polling task to check for ended videos and request repaints
-        cx.spawn(async |view: WeakEntity<Self>, cx: &mut AsyncApp| {
-            loop {
-                cx.background_executor().timer(POLL_INTERVAL).await;
-
-                let should_continue = view
-                    .update(cx, |this: &mut Self, cx: &mut Context<Self>| {
-                        this.check_and_replace_ended_videos(cx);
-                        // Always notify to keep rendering new frames
-                        cx.notify();
-                        true
-                    })
-                    .unwrap_or(false);
-
-                if !should_continue {
-                    break;
-                }
-            }
-        })
-        .detach();
-
-        Self {
-            players,
-            all_video_paths,
-            mixer,
-        }
+    ) {
+        let index = slot.read(cx).index();
+        self.replace_video(index, cx);
     }
 
-    /**
-        Check each video slot and replace any that have finished
-    */
-    fn check_and_replace_ended_videos(&mut self, _cx: &mut Context<Self>) {
-        for i in 0..4 {
-            if self.players[i].is_ended() {
-                // Remove old audio stream from mixer
-                self.mixer.set_stream(i, None);
+    /// Replace the video at the given slot index with a new random video.
+    fn replace_video(&mut self, index: usize, cx: &mut Context<Self>) {
+        // Get paths and mixer from global state
+        let app_state = cx.global::<AppState>();
+        let video_paths = app_state.video_paths.clone();
+        let mixer = Arc::clone(&app_state.mixer);
 
-                if let Some(new_player) = self.create_replacement_player() {
-                    let path = new_player.path();
-                    println!(
-                        "Slot {}: replaced with {}",
-                        i,
-                        path.file_name().unwrap_or_default().to_string_lossy()
-                    );
-
-                    // Register new audio consumer with mixer
-                    if let Some(audio_consumer) = new_player.audio_consumer() {
-                        self.mixer.set_stream(i, Some(audio_consumer));
-                    }
-
-                    self.players[i] = Arc::new(new_player);
-                }
-            }
-        }
-    }
-
-    /**
-        Create a new random video player from the available paths,
-        excluding any videos currently playing in other slots.
-    */
-    fn create_replacement_player(&self) -> Option<VideoPlayer> {
-        let mut rng = rand::thread_rng();
-
-        // Get paths of currently playing videos
-        let current_paths: Vec<_> = self.players.iter().map(|p| p.path()).collect();
-
-        // Filter to videos not currently playing
-        let available: Vec<_> = self
-            .all_video_paths
+        // Get paths of currently playing videos (excluding the one being replaced)
+        let current_paths: Vec<_> = self
+            .slots
             .iter()
-            .filter(|p| !current_paths.contains(&p.as_path()))
+            .enumerate()
+            .filter(|(i, _)| *i != index)
+            .map(|(_, slot)| slot.read(cx).player().path().to_path_buf())
             .collect();
 
-        // Pick from available videos, or fall back to all videos if not enough
+        // Pick a random video that's not currently playing
+        let mut rng = rand::thread_rng();
+        let available: Vec<_> = video_paths
+            .iter()
+            .filter(|p| !current_paths.iter().any(|cp| cp == *p))
+            .collect();
+
         let path = if available.is_empty() {
-            self.all_video_paths.choose(&mut rng)?
+            match video_paths.choose(&mut rng) {
+                Some(p) => p,
+                None => return, // No videos available
+            }
         } else {
-            *available.choose(&mut rng)?
+            *available.choose(&mut rng).unwrap()
         };
 
-        match VideoPlayer::with_options(path, None, None) {
-            Ok(player) => Some(player),
+        // Create new player
+        let new_player = match VideoPlayer::with_options(path, None, None) {
+            Ok(player) => Arc::new(player),
             Err(e) => {
                 eprintln!("Failed to create player for {:?}: {}", path, e);
-                None
+                return;
             }
+        };
+
+        println!(
+            "Slot {}: replaced with {}",
+            index,
+            path.file_name().unwrap_or_default().to_string_lossy()
+        );
+
+        // Update mixer with new audio consumer
+        mixer.set_stream(index, None); // Remove old stream
+        if let Some(audio_consumer) = new_player.audio_consumer() {
+            mixer.set_stream(index, Some(audio_consumer));
+        }
+
+        // Update the player in AppState so pause/resume works
+        cx.update_global::<AppState, _>(|state, _cx| {
+            state.set_player(index, Arc::clone(&new_player));
+        });
+
+        // Create new slot entity and subscribe to its events
+        let new_slot = cx.new(|cx| VideoSlot::new(new_player, index, cx));
+        cx.subscribe(&new_slot, Self::on_video_ended).detach();
+
+        // Replace the slot
+        self.slots[index] = new_slot;
+
+        // Notify that the view needs to re-render
+        cx.notify();
+    }
+
+    /// Pause all videos in the grid.
+    pub fn pause_all(&self, cx: &Context<Self>) {
+        for slot in &self.slots {
+            slot.read(cx).pause();
         }
     }
 
-    /**
-        Get a reference to the audio mixer
-    */
-    pub fn mixer(&self) -> &Arc<AudioMixer> {
-        &self.mixer
+    /// Resume all videos in the grid.
+    pub fn resume_all(&self, cx: &Context<Self>) {
+        for slot in &self.slots {
+            slot.read(cx).resume();
+        }
+    }
+
+    /// Render a single slot at the given index.
+    fn render_slot(&self, index: usize, cx: &Context<Self>) -> impl IntoElement {
+        let player = self.slots[index].read(cx).player().clone();
+        let id = ("video", index);
+        div()
+            .flex_1()
+            .overflow_hidden()
+            .child(video_element(player, id))
     }
 }
 
-impl Render for VideoGridView {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+impl Render for GridView {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .size_full()
             .bg(rgb(0x000000))
@@ -134,27 +153,17 @@ impl Render for VideoGridView {
             .flex_col()
             .children([
                 // Top row
-                div().flex_1().flex().flex_row().children([
-                    div()
-                        .flex_1()
-                        .overflow_hidden()
-                        .child(video_element(Arc::clone(&self.players[0]), "video-0")),
-                    div()
-                        .flex_1()
-                        .overflow_hidden()
-                        .child(video_element(Arc::clone(&self.players[1]), "video-1")),
-                ]),
+                div()
+                    .flex_1()
+                    .flex()
+                    .flex_row()
+                    .children([self.render_slot(0, cx), self.render_slot(1, cx)]),
                 // Bottom row
-                div().flex_1().flex().flex_row().children([
-                    div()
-                        .flex_1()
-                        .overflow_hidden()
-                        .child(video_element(Arc::clone(&self.players[2]), "video-2")),
-                    div()
-                        .flex_1()
-                        .overflow_hidden()
-                        .child(video_element(Arc::clone(&self.players[3]), "video-3")),
-                ]),
+                div()
+                    .flex_1()
+                    .flex()
+                    .flex_row()
+                    .children([self.render_slot(2, cx), self.render_slot(3, cx)]),
             ])
     }
 }
