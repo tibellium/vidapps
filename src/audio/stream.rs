@@ -2,8 +2,9 @@ use std::cell::UnsafeCell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use parking_lot::Mutex;
 use ringbuf::{
     HeapRb,
     traits::{Consumer, Observer, Producer, Split},
@@ -44,11 +45,24 @@ const DEFAULT_CHANNELS: u16 = 2;
 ///
 /// The clock is updated by the audio consumer as it consumes samples,
 /// and can be read by any component that needs to know the current audio time.
+///
+/// When audio playback finishes (all samples consumed), the clock automatically
+/// switches to wall-time-based extrapolation so video frames continue to advance.
 pub struct AudioStreamClock {
     /// Total number of samples consumed (interleaved, so L+R = 2 samples)
     samples_consumed: AtomicU64,
     sample_rate: u32,
     channels: u16,
+    /// When audio finishes, we record the position and wall time to extrapolate from
+    finished_state: Mutex<Option<FinishedState>>,
+}
+
+/// State recorded when audio playback finishes
+struct FinishedState {
+    /// The audio position when playback finished
+    position_at_finish: Duration,
+    /// The wall time when playback finished
+    wall_time_at_finish: Instant,
 }
 
 impl AudioStreamClock {
@@ -58,18 +72,47 @@ impl AudioStreamClock {
             samples_consumed: AtomicU64::new(0),
             sample_rate,
             channels,
+            finished_state: Mutex::new(None),
         }
     }
 
     /// Get the current playback position as a Duration.
     /// This is the primary method for A/V sync - video should display
     /// frames whose PTS is <= this position.
+    ///
+    /// If audio has finished, this extrapolates using wall time from
+    /// the point where audio ended, ensuring video continues to advance.
     pub fn position(&self) -> Duration {
+        // Check if audio has finished - if so, extrapolate from wall time
+        if let Some(ref finished) = *self.finished_state.lock() {
+            let elapsed_since_finish = finished.wall_time_at_finish.elapsed();
+            return finished.position_at_finish + elapsed_since_finish;
+        }
+
+        // Normal case: return position based on samples consumed
         let samples = self.samples_consumed.load(Ordering::Relaxed);
         // samples is interleaved (L,R,L,R...), so divide by channels to get audio frames
         let audio_frames = samples / self.channels as u64;
         // Convert audio frames to duration
         Duration::from_secs_f64(audio_frames as f64 / self.sample_rate as f64)
+    }
+
+    /// Mark the audio stream as finished.
+    /// After this, position() will extrapolate using wall time.
+    /// Called by AudioStreamConsumer when the ring buffer is empty and closed.
+    pub(crate) fn mark_finished(&self) {
+        let mut finished = self.finished_state.lock();
+        if finished.is_none() {
+            let current_position = {
+                let samples = self.samples_consumed.load(Ordering::Relaxed);
+                let audio_frames = samples / self.channels as u64;
+                Duration::from_secs_f64(audio_frames as f64 / self.sample_rate as f64)
+            };
+            *finished = Some(FinishedState {
+                position_at_finish: current_position,
+                wall_time_at_finish: Instant::now(),
+            });
+        }
     }
 
     /// Get the total number of samples consumed (raw count)
@@ -100,7 +143,8 @@ impl AudioStreamClock {
 /// The producer and consumer halves can operate independently without locking.
 pub struct AudioStreamProducer {
     producer: UnsafeCell<ringbuf::HeapProd<f32>>,
-    closed: AtomicBool,
+    /// Shared with consumer to signal end of stream
+    closed: Arc<AtomicBool>,
 }
 
 // SAFETY: HeapProd is safe to send between threads.
@@ -155,7 +199,8 @@ impl AudioStreamProducer {
 pub struct AudioStreamConsumer {
     consumer: UnsafeCell<ringbuf::HeapCons<f32>>,
     volume: AtomicF32,
-    closed: AtomicBool,
+    /// Shared with producer - set when producer signals end of stream
+    closed: Arc<AtomicBool>,
     /// Shared clock for tracking playback position
     clock: Arc<AudioStreamClock>,
 }
@@ -202,6 +247,9 @@ impl AudioStreamConsumer {
     /// This is completely lock-free and safe for real-time audio.
     /// Updates the shared clock with the number of samples actually consumed.
     ///
+    /// When the audio stream ends (closed and empty), marks the clock as finished
+    /// so it can switch to wall-time extrapolation for remaining video frames.
+    ///
     /// Returns: Number of actual audio samples written (not silence)
     pub fn fill_buffer(&self, output: &mut [f32]) -> usize {
         let volume = self.volume();
@@ -234,6 +282,13 @@ impl AudioStreamConsumer {
             for sample in output.iter_mut() {
                 *sample = 0.0;
             }
+
+            // If stream is closed and empty, mark clock as finished
+            // so video can continue using wall time
+            if self.closed.load(Ordering::Acquire) {
+                self.clock.mark_finished();
+            }
+
             0
         }
     }
@@ -249,16 +304,18 @@ pub fn create_audio_stream() -> (
     let (producer, consumer) = rb.split();
 
     let clock = Arc::new(AudioStreamClock::new(DEFAULT_SAMPLE_RATE, DEFAULT_CHANNELS));
+    // Shared closed flag so consumer knows when producer is done
+    let closed = Arc::new(AtomicBool::new(false));
 
     (
         AudioStreamProducer {
             producer: UnsafeCell::new(producer),
-            closed: AtomicBool::new(false),
+            closed: Arc::clone(&closed),
         },
         AudioStreamConsumer {
             consumer: UnsafeCell::new(consumer),
             volume: AtomicF32::new(1.0),
-            closed: AtomicBool::new(false),
+            closed,
             clock: Arc::clone(&clock),
         },
         clock,

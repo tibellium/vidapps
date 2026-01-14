@@ -27,10 +27,11 @@ pub enum PlaybackState {
 /**
     Playback clock abstraction.
 
-    For videos WITH audio: Uses AudioStreamClock (audio is master)
-    For videos WITHOUT audio: Uses wall clock from start instant
+    For videos WITH audio: Uses AudioStreamClock (audio is master).
+    When audio finishes, AudioStreamClock automatically extrapolates
+    using wall time so remaining video frames continue to display.
 
-    This allows consistent frame timing logic regardless of audio presence.
+    For videos WITHOUT audio: Uses wall clock from start instant.
 */
 pub enum PlaybackClock {
     Audio(Arc<AudioStreamClock>),
@@ -269,13 +270,23 @@ impl VideoPlayer {
         }
 
         // Check for end of playback
-        if next.is_none() && frame_queue.is_closed() {
-            if current.is_some() {
+        // Only mark as ended when:
+        // 1. No next frame buffered
+        // 2. Frame queue is closed (no more frames coming)
+        // 3. Frame queue is empty (all frames have been consumed)
+        // 4. We've shown the current frame long enough (elapsed > its PTS)
+        if next.is_none() && frame_queue.is_closed() && frame_queue.is_empty() {
+            if let Some(ref frame) = *current {
                 let base = base_pts.unwrap_or(Duration::ZERO);
-                let adjusted_duration = self.duration.saturating_sub(base);
-                if elapsed > adjusted_duration {
+                let frame_pts = frame.pts.saturating_sub(base);
+                // Only end after we've been past the last frame's PTS for a bit
+                // This ensures the last frame is displayed
+                if elapsed > frame_pts {
                     *state = PlaybackState::Ended;
                 }
+            } else {
+                // No current frame and nothing left - we're done
+                *state = PlaybackState::Ended;
             }
         }
 
