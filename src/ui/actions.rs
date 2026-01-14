@@ -9,7 +9,7 @@ gpui::actions!(
         ToggleMute,  // M - mute/unmute all videos
         VolumeUp,    // Up arrow - increase master volume
         VolumeDown,  // Down arrow - decrease master volume
-        Quit,        // Q - quit the application
+        Quit,        // Cmd+Q - quit the application
     ]
 );
 
@@ -56,8 +56,6 @@ fn key_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("m", ToggleMute, None),
         KeyBinding::new("up", VolumeUp, None),
         KeyBinding::new("down", VolumeDown, None),
-        KeyBinding::new("q", Quit, None),
-        // Also support Cmd+Q on macOS
         KeyBinding::new("cmd-q", Quit, None),
     ]
 }

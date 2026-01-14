@@ -8,7 +8,7 @@
     - Space: Pause/Resume all videos
     - M: Mute/Unmute audio
     - Up/Down: Adjust volume
-    - Q: Quit
+    - Cmd+Q: Quit
 
     Prerequisites:
     - FFmpeg: `brew install ffmpeg`
@@ -213,9 +213,9 @@ fn open_grid_with_folder(folder: PathBuf, cx: &mut App) {
     cx.activate(true);
 
     println!("\nKeyboard shortcuts:");
-    println!("  Space - Pause/Resume");
-    println!("  M     - Mute/Unmute");
-    println!("  Up    - Volume up");
-    println!("  Down  - Volume down");
-    println!("  Q     - Quit");
+    println!("  Space  - Pause/Resume");
+    println!("  M      - Mute/Unmute");
+    println!("  Up     - Volume up");
+    println!("  Down   - Volume down");
+    println!("  Cmd+Q  - Quit");
 }
