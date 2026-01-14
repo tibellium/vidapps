@@ -441,6 +441,21 @@ pub fn decode_video_packets(
             let src_height = sw_frame.height();
             let src_format = sw_frame.format();
 
+            // Validate frame dimensions - swscale will assert on invalid dimensions
+            if src_width == 0 || src_height == 0 {
+                eprintln!(
+                    "[video_decode] skipping frame with invalid dimensions: {}x{}",
+                    src_width, src_height
+                );
+                continue;
+            }
+
+            // Check for unsupported pixel format (None indicates unknown format)
+            if src_format == ffmpeg_next::format::Pixel::None {
+                eprintln!("[video_decode] skipping frame with unknown pixel format");
+                continue;
+            }
+
             let needs_new_scaler = scaler.is_none()
                 || scaler_src_format != Some(src_format)
                 || scaler_src_width != src_width
@@ -450,7 +465,16 @@ pub fn decode_video_packets(
                 let dst_width = target_width.unwrap_or(src_width);
                 let dst_height = target_height.unwrap_or(src_height);
 
-                scaler = Some(ScalerContext::get(
+                // Ensure destination dimensions are also valid
+                if dst_width == 0 || dst_height == 0 {
+                    eprintln!(
+                        "[video_decode] skipping frame with invalid target dimensions: {}x{}",
+                        dst_width, dst_height
+                    );
+                    continue;
+                }
+
+                match ScalerContext::get(
                     src_format,
                     src_width,
                     src_height,
@@ -458,15 +482,29 @@ pub fn decode_video_packets(
                     dst_width,
                     dst_height,
                     ScalerFlags::BILINEAR,
-                )?);
-                scaler_src_format = Some(src_format);
-                scaler_src_width = src_width;
-                scaler_src_height = src_height;
+                ) {
+                    Ok(s) => {
+                        scaler = Some(s);
+                        scaler_src_format = Some(src_format);
+                        scaler_src_width = src_width;
+                        scaler_src_height = src_height;
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[video_decode] failed to create scaler for format {:?} {}x{}: {}",
+                            src_format, src_width, src_height, e
+                        );
+                        continue;
+                    }
+                }
             }
 
             // Scale to BGRA
             let scaler = scaler.as_mut().unwrap();
-            scaler.run(&sw_frame, &mut bgra_frame)?;
+            if let Err(e) = scaler.run(&sw_frame, &mut bgra_frame) {
+                eprintln!("[video_decode] scaler error: {}", e);
+                continue;
+            }
 
             let dst_width = bgra_frame.width();
             let dst_height = bgra_frame.height();
@@ -511,8 +549,18 @@ pub fn decode_video_packets(
             copy
         };
 
+        // Validate frame before scaling
+        let src_width = sw_frame.width();
+        let src_height = sw_frame.height();
+        if src_width == 0 || src_height == 0 {
+            continue;
+        }
+
         if let Some(ref mut scaler) = scaler {
-            scaler.run(&sw_frame, &mut bgra_frame)?;
+            if let Err(e) = scaler.run(&sw_frame, &mut bgra_frame) {
+                eprintln!("[video_decode] scaler error during flush: {}", e);
+                continue;
+            }
 
             let dst_width = bgra_frame.width();
             let dst_height = bgra_frame.height();
@@ -681,10 +729,8 @@ pub fn decode_audio_packets(
                 .map(|chunk| f32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
                 .collect();
 
-            if !float_samples.is_empty() {
-                if !producer.push(&float_samples) {
-                    break;
-                }
+            if !float_samples.is_empty() && !producer.push(&float_samples) {
+                break;
             }
         }
     }
