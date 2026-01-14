@@ -82,6 +82,10 @@ impl AudioMixer {
         output: Interleaved stereo buffer to fill
     */
     pub fn fill_buffer(&self, output: &mut [f32]) {
+        use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+        static FILL_COUNT: AtomicU64 = AtomicU64::new(0);
+        static LOCK_FAIL_COUNT: AtomicU64 = AtomicU64::new(0);
+
         let master_vol = self.master_volume();
 
         // Clear output buffer first
@@ -91,8 +95,21 @@ impl AudioMixer {
 
         // Try to get read lock - if unavailable, we already have silence
         let Some(streams) = self.streams.try_read() else {
+            let fails = LOCK_FAIL_COUNT.fetch_add(1, AtomicOrdering::Relaxed);
+            if fails % 100 == 0 {
+                eprintln!("[mixer] lock failed {} times", fails);
+            }
             return;
         };
+
+        let count = FILL_COUNT.fetch_add(1, AtomicOrdering::Relaxed);
+        if count % 1000 == 0 {
+            let stream_count = streams.iter().filter(|s| s.is_some()).count();
+            eprintln!(
+                "[mixer] fill #{}, {} streams registered",
+                count, stream_count
+            );
+        }
 
         // Process in chunks to use stack-allocated buffer
         let mut stream_buffer = [0.0f32; MIX_BUFFER_SIZE];

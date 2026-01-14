@@ -79,12 +79,20 @@ impl AudioOutput {
             buffer_size: BufferSize::Fixed(buffer_size),
         };
 
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static CALLBACK_COUNT: AtomicU64 = AtomicU64::new(0);
+
         let stream = device
             .build_output_stream(
                 &config,
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     // Fill the buffer directly - mixer uses lock-free reads
                     mixer.fill_buffer(data);
+
+                    let count = CALLBACK_COUNT.fetch_add(1, Ordering::Relaxed);
+                    if count % 1000 == 0 {
+                        eprintln!("[audio] callback #{}, buffer size: {}", count, data.len());
+                    }
                 },
                 |err| {
                     eprintln!("Audio stream error: {}", err);

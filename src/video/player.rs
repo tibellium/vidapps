@@ -12,7 +12,9 @@ use image::{Frame, RgbaImage};
 use super::decoder::{DecoderError, decode_video, get_video_info};
 use super::frame::VideoFrame;
 use super::queue::FrameQueue;
-use crate::audio::{AudioStreamConsumer, AudioStreamProducer, create_audio_stream};
+use crate::audio::{
+    AudioStreamClock, AudioStreamConsumer, AudioStreamProducer, create_audio_stream,
+};
 
 const DEFAULT_VIDEO_QUEUE_CAPACITY: usize = 60;
 
@@ -27,15 +29,21 @@ pub enum PlaybackState {
 }
 
 /**
-    High-level video player that manages decoding and playback timing
+    High-level video player that manages decoding and playback timing.
+
+    For videos with audio, timing is driven by the audio clock (samples consumed).
+    For videos without audio, timing falls back to wall clock.
 */
 pub struct VideoPlayer {
     path: PathBuf,
     video_queue: Arc<FrameQueue>,
     audio_producer: Option<Arc<AudioStreamProducer>>,
     audio_consumer: Option<Arc<AudioStreamConsumer>>,
+    /// Shared audio clock for A/V sync (None for videos without audio)
+    audio_clock: Option<Arc<AudioStreamClock>>,
     stop_flag: Arc<AtomicBool>,
     decoder_handle: Option<JoinHandle<Result<(), DecoderError>>>,
+    /// Wall clock start time (used as fallback for videos without audio)
     start_time: Instant,
     current_frame: Mutex<Option<VideoFrame>>,
     next_frame: Mutex<Option<VideoFrame>>, // Buffered frame waiting for its PTS
@@ -71,11 +79,15 @@ impl VideoPlayer {
         let stop_flag = Arc::new(AtomicBool::new(false));
 
         // Create audio stream if video has audio
-        let (audio_producer, audio_consumer) = if info.has_audio {
-            let (producer, consumer) = create_audio_stream();
-            (Some(Arc::new(producer)), Some(Arc::new(consumer)))
+        let (audio_producer, audio_consumer, audio_clock) = if info.has_audio {
+            let (producer, consumer, clock) = create_audio_stream();
+            (
+                Some(Arc::new(producer)),
+                Some(Arc::new(consumer)),
+                Some(clock),
+            )
         } else {
-            (None, None)
+            (None, None, None)
         };
 
         // Spawn decoder thread
@@ -100,6 +112,7 @@ impl VideoPlayer {
             video_queue,
             audio_producer,
             audio_consumer,
+            audio_clock,
             stop_flag,
             decoder_handle: Some(decoder_handle),
             start_time,
@@ -128,11 +141,26 @@ impl VideoPlayer {
     }
 
     /**
-        Get the current playback position
+        Get the current playback position.
+        For videos with audio, this is the audio clock position.
+        For videos without audio, this is based on wall clock.
     */
     pub fn position(&self) -> Duration {
-        let current = self.current_frame.lock().unwrap();
-        current.as_ref().map(|f| f.pts).unwrap_or(Duration::ZERO)
+        self.get_playback_time()
+    }
+
+    /**
+        Get the current playback time to use for frame timing.
+        Uses audio clock if available, otherwise wall clock.
+    */
+    fn get_playback_time(&self) -> Duration {
+        if let Some(ref clock) = self.audio_clock {
+            // Audio-driven: use the audio playback position
+            clock.position()
+        } else {
+            // No audio: fall back to wall clock
+            self.start_time.elapsed()
+        }
     }
 
     /**
@@ -154,6 +182,14 @@ impl VideoPlayer {
     */
     pub fn audio_consumer(&self) -> Option<&Arc<AudioStreamConsumer>> {
         self.audio_consumer.as_ref()
+    }
+
+    /**
+        Get the audio clock if this video has audio.
+        This can be shared with other components for A/V sync.
+    */
+    pub fn audio_clock(&self) -> Option<&Arc<AudioStreamClock>> {
+        self.audio_clock.as_ref()
     }
 
     /**
@@ -185,10 +221,15 @@ impl VideoPlayer {
     /**
         Get the cached RenderImage for the current frame.
         Only creates a new RenderImage when the frame actually changes.
+
+        For videos with audio, frame timing is driven by the audio clock.
+        For videos without audio, frame timing uses wall clock.
+
         Returns (current_image, old_image_to_drop) - caller should drop the old image via window.drop_image()
     */
     pub fn get_render_image(&self) -> (Option<Arc<RenderImage>>, Option<Arc<RenderImage>>) {
-        let elapsed = self.start_time.elapsed();
+        // Get playback time from audio clock or wall clock
+        let elapsed = self.get_playback_time();
 
         let mut current = self.current_frame.lock().unwrap();
         let mut next = self.next_frame.lock().unwrap();

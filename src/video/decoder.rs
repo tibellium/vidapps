@@ -335,7 +335,7 @@ pub fn decode_video<P: AsRef<Path>>(
 
                 let frame = VideoFrame::new(bgra_data, dst_width, dst_height, pts);
 
-                // Push to queue (blocks if full)
+                // Push to queue (blocks if full - natural backpressure)
                 if !video_queue.push(frame) {
                     // Queue was closed
                     return Ok(());
