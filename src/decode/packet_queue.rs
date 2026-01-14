@@ -108,4 +108,21 @@ impl PacketQueue {
     pub fn len(&self) -> usize {
         self.inner.lock().unwrap().packets.len()
     }
+
+    /// Clear all packets from the queue.
+    /// Wakes any threads waiting to push.
+    pub fn clear(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.packets.clear();
+        self.not_full.notify_all();
+    }
+
+    /// Reopen a closed queue for reuse (e.g., after seeking).
+    /// Clears any remaining packets and resets the closed flag.
+    pub fn reopen(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.packets.clear();
+        inner.closed = false;
+        self.not_full.notify_all();
+    }
 }

@@ -102,6 +102,28 @@ impl PlaybackClock {
             }
         }
     }
+
+    /// Seek the clock to a new position.
+    /// For wall-time clocks, resets accumulated time.
+    /// For audio clocks, this is handled by AudioStreamClock::reset_to().
+    pub fn seek_to(&self, position: Duration) {
+        match self {
+            Self::Audio(clock) => {
+                clock.reset_to(position);
+            }
+            Self::WallTime {
+                accumulated,
+                playing_since,
+            } => {
+                *accumulated.lock().unwrap() = position;
+                // If currently playing, reset the start time to now
+                let mut since = playing_since.lock().unwrap();
+                if since.is_some() {
+                    *since = Some(Instant::now());
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -278,7 +300,7 @@ impl VideoPlayer {
     /**
         Get the audio stream consumer if this video has audio
     */
-    pub fn audio_consumer(&self) -> Option<&Arc<AudioStreamConsumer>> {
+    pub fn audio_consumer(&self) -> Option<Arc<AudioStreamConsumer>> {
         self.audio_pipeline.as_ref().map(|p| p.consumer())
     }
 
@@ -351,6 +373,91 @@ impl VideoPlayer {
             .as_ref()
             .map(|a| a.consumer().is_muted())
             .unwrap_or(false)
+    }
+
+    /**
+        Seek to a specific position in the video.
+
+        This will:
+        1. Stop current demux/decode threads
+        2. Clear all buffers
+        3. Seek in the file
+        4. Restart threads from the new position
+        5. Reset the playback clock
+
+        Returns the new audio consumer if this video has audio (caller must update mixer).
+        The current playback state (playing/paused) is preserved.
+    */
+    pub fn seek_to(
+        &self,
+        position: Duration,
+    ) -> Result<Option<Arc<AudioStreamConsumer>>, DecoderError> {
+        // Clamp position to valid range
+        let position = position.min(self.duration);
+
+        // Remember current state
+        let was_paused = self.is_paused();
+
+        // Seek video pipeline
+        self.video_pipeline.seek_to(position)?;
+
+        // Seek audio pipeline if present, get new consumer
+        let new_consumer = if let Some(ref audio) = self.audio_pipeline {
+            Some(audio.seek_to(position)?)
+        } else {
+            None
+        };
+
+        // Reset playback clock (for wall-time clock; audio clock is reset by pipeline)
+        self.playback_clock.seek_to(position);
+
+        // Clear frame state
+        {
+            *self.current_frame.lock().unwrap() = None;
+            *self.next_frame.lock().unwrap() = None;
+            *self.base_pts.lock().unwrap() = None;
+            *self.cached_render_image.lock().unwrap() = None;
+            self.frame_generation.fetch_add(1, Ordering::Relaxed);
+        }
+
+        // Reset state to playing (unless it was paused)
+        {
+            let mut state = self.state.lock().unwrap();
+            if *state == PlaybackState::Ended || *state == PlaybackState::Error {
+                *state = PlaybackState::Playing;
+            }
+        }
+
+        // Restore pause state if needed
+        if was_paused {
+            self.pause();
+        }
+
+        Ok(new_consumer)
+    }
+
+    /**
+        Seek forward by the given duration.
+        Returns the new audio consumer if this video has audio (caller must update mixer).
+    */
+    pub fn seek_forward(
+        &self,
+        amount: Duration,
+    ) -> Result<Option<Arc<AudioStreamConsumer>>, DecoderError> {
+        let new_position = self.position().saturating_add(amount);
+        self.seek_to(new_position)
+    }
+
+    /**
+        Seek backward by the given duration.
+        Returns the new audio consumer if this video has audio (caller must update mixer).
+    */
+    pub fn seek_backward(
+        &self,
+        amount: Duration,
+    ) -> Result<Option<Arc<AudioStreamConsumer>>, DecoderError> {
+        let new_position = self.position().saturating_sub(amount);
+        self.seek_to(new_position)
     }
 
     /**
@@ -461,18 +568,12 @@ impl VideoPlayer {
     /**
         Stop playback and clean up resources
     */
-    pub fn stop(&mut self) {
+    pub fn stop(&self) {
         // Stop both pipelines (they handle their own cleanup)
-        if let Some(ref mut audio) = self.audio_pipeline {
+        if let Some(ref audio) = self.audio_pipeline {
             audio.stop();
         }
         self.video_pipeline.stop();
-    }
-}
-
-impl Drop for VideoPlayer {
-    fn drop(&mut self) {
-        self.stop();
     }
 }
 

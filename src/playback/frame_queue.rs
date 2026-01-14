@@ -164,4 +164,15 @@ impl FrameQueue {
         inner.frames.clear();
         self.not_full.notify_all();
     }
+
+    /**
+        Reopen a closed queue for reuse (e.g., after seeking).
+        Clears any remaining frames and resets the closed flag.
+    */
+    pub fn reopen(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.frames.clear();
+        inner.closed = false;
+        self.not_full.notify_all();
+    }
 }

@@ -75,7 +75,7 @@ impl VideoGridView {
 
                     // Register new audio consumer with mixer
                     if let Some(audio_consumer) = new_player.audio_consumer() {
-                        self.mixer.set_stream(i, Some(Arc::clone(audio_consumer)));
+                        self.mixer.set_stream(i, Some(audio_consumer));
                     }
 
                     self.players[i] = Arc::new(new_player);

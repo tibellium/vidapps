@@ -187,11 +187,14 @@ fn pts_to_duration(pts: i64, time_base: Rational) -> Duration {
     Demux only audio packets from a video file.
     Opens its own file handle - completely independent from video demux.
     This is part of the separated pipeline architecture to prevent deadlocks.
+
+    If `start_position` is provided, seeks to that position before demuxing.
 */
 pub fn audio_demux<P: AsRef<Path>>(
     path: P,
     audio_packets: Arc<PacketQueue>,
     stop_flag: Arc<AtomicBool>,
+    start_position: Option<Duration>,
 ) -> Result<(), DecoderError> {
     ffmpeg_next::init()?;
 
@@ -202,6 +205,12 @@ pub fn audio_demux<P: AsRef<Path>>(
         .best(Type::Audio)
         .ok_or(DecoderError::NoAudioStream)?
         .index();
+
+    // Seek to start position if specified
+    if let Some(pos) = start_position {
+        let ts = (pos.as_secs_f64() * ffmpeg_next::ffi::AV_TIME_BASE as f64) as i64;
+        input_ctx.seek(ts, ..ts)?;
+    }
 
     let mut pkt_count = 0u64;
 
@@ -242,11 +251,14 @@ pub fn audio_demux<P: AsRef<Path>>(
     Demux only video packets from a video file.
     Opens its own file handle - completely independent from audio demux.
     This is part of the separated pipeline architecture to prevent deadlocks.
+
+    If `start_position` is provided, seeks to that position before demuxing.
 */
 pub fn video_demux<P: AsRef<Path>>(
     path: P,
     video_packets: Arc<PacketQueue>,
     stop_flag: Arc<AtomicBool>,
+    start_position: Option<Duration>,
 ) -> Result<(), DecoderError> {
     ffmpeg_next::init()?;
 
@@ -257,6 +269,12 @@ pub fn video_demux<P: AsRef<Path>>(
         .best(Type::Video)
         .ok_or(DecoderError::NoVideoStream)?
         .index();
+
+    // Seek to start position if specified
+    if let Some(pos) = start_position {
+        let ts = (pos.as_secs_f64() * ffmpeg_next::ffi::AV_TIME_BASE as f64) as i64;
+        input_ctx.seek(ts, ..ts)?;
+    }
 
     let mut pkt_count = 0u64;
 

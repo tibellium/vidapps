@@ -145,7 +145,7 @@ fn open_grid_with_folder(folder: PathBuf, cx: &mut App) {
     // Register audio consumers with the mixer
     for (i, player) in players.iter().enumerate() {
         if let Some(audio_consumer) = player.audio_consumer() {
-            mixer.set_stream(i, Some(Arc::clone(audio_consumer)));
+            mixer.set_stream(i, Some(audio_consumer));
             println!("  [{}] Audio stream registered", i);
         }
     }

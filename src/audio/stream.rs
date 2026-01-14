@@ -134,6 +134,18 @@ impl AudioStreamClock {
     pub fn channels(&self) -> u16 {
         self.channels
     }
+
+    /// Reset the clock to a specific position (for seeking).
+    /// This sets the samples_consumed to match the target position
+    /// and clears any finished state.
+    pub fn reset_to(&self, position: Duration) {
+        // Calculate how many samples correspond to this position
+        let audio_frames = (position.as_secs_f64() * self.sample_rate as f64) as u64;
+        let samples = audio_frames * self.channels as u64;
+        self.samples_consumed.store(samples, Ordering::Relaxed);
+        // Clear finished state so clock resumes normal operation
+        *self.finished_state.lock() = None;
+    }
 }
 
 /// Producer half of the audio stream (used by decoder thread)
@@ -362,10 +374,20 @@ pub fn create_audio_stream() -> (
     AudioStreamConsumer,
     Arc<AudioStreamClock>,
 ) {
+    let clock = Arc::new(AudioStreamClock::new(DEFAULT_SAMPLE_RATE, DEFAULT_CHANNELS));
+    let (producer, consumer) = create_audio_stream_with_clock(Arc::clone(&clock));
+    (producer, consumer, clock)
+}
+
+/// Create a new audio stream using an existing clock.
+/// Used for seeking - we create fresh producer/consumer but keep the same clock
+/// so the VideoPlayer's PlaybackClock reference remains valid.
+pub fn create_audio_stream_with_clock(
+    clock: Arc<AudioStreamClock>,
+) -> (AudioStreamProducer, AudioStreamConsumer) {
     let rb = HeapRb::<f32>::new(RING_BUFFER_SIZE);
     let (producer, consumer) = rb.split();
 
-    let clock = Arc::new(AudioStreamClock::new(DEFAULT_SAMPLE_RATE, DEFAULT_CHANNELS));
     // Shared closed flag so consumer knows when producer is done
     let closed = Arc::new(AtomicBool::new(false));
 
@@ -380,8 +402,7 @@ pub fn create_audio_stream() -> (
             closed,
             paused: AtomicBool::new(false),
             muted: AtomicBool::new(false),
-            clock: Arc::clone(&clock),
+            clock,
         },
-        clock,
     )
 }
