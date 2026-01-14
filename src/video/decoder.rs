@@ -28,6 +28,7 @@ use crate::audio::{AudioStreamProducer, DEFAULT_SAMPLE_RATE};
 #[derive(Debug)]
 pub enum DecoderError {
     NoVideoStream,
+    NoAudioStream,
     Ffmpeg(ffmpeg_next::Error),
     Io(std::io::Error),
 }
@@ -37,6 +38,7 @@ impl std::fmt::Display for DecoderError {
         match self {
             DecoderError::Ffmpeg(e) => write!(f, "FFmpeg error: {}", e),
             DecoderError::NoVideoStream => write!(f, "No video stream found"),
+            DecoderError::NoAudioStream => write!(f, "No audio stream found"),
             DecoderError::Io(e) => write!(f, "IO error: {}", e),
         }
     }
@@ -67,13 +69,21 @@ pub struct VideoInfo {
 }
 
 /**
-    Information about streams needed by decode threads
+    Audio-specific stream info for independent audio pipeline
 */
-pub struct StreamInfo {
-    pub video_time_base: Rational,
-    pub video_codec_params: codec::Parameters,
-    pub audio_time_base: Option<Rational>,
-    pub audio_codec_params: Option<codec::Parameters>,
+pub struct AudioStreamInfo {
+    pub time_base: Rational,
+    pub codec_params: codec::Parameters,
+}
+
+/**
+    Video-specific stream info for independent video pipeline
+*/
+pub struct VideoStreamInfo {
+    pub time_base: Rational,
+    pub codec_params: codec::Parameters,
+    pub width: u32,
+    pub height: u32,
 }
 
 /**
@@ -120,9 +130,28 @@ pub fn get_video_info<P: AsRef<Path>>(path: P) -> Result<VideoInfo, DecoderError
 }
 
 /**
-    Get stream info needed by decode threads
+    Get audio stream info (returns error if no audio stream)
 */
-pub fn get_stream_info<P: AsRef<Path>>(path: P) -> Result<StreamInfo, DecoderError> {
+pub fn get_audio_stream_info<P: AsRef<Path>>(path: P) -> Result<AudioStreamInfo, DecoderError> {
+    ffmpeg_next::init()?;
+
+    let input_ctx = input(&path)?;
+
+    let audio_stream = input_ctx
+        .streams()
+        .best(Type::Audio)
+        .ok_or(DecoderError::NoAudioStream)?;
+
+    Ok(AudioStreamInfo {
+        time_base: audio_stream.time_base(),
+        codec_params: audio_stream.parameters(),
+    })
+}
+
+/**
+    Get video stream info (returns error if no video stream)
+*/
+pub fn get_video_stream_info<P: AsRef<Path>>(path: P) -> Result<VideoStreamInfo, DecoderError> {
     ffmpeg_next::init()?;
 
     let input_ctx = input(&path)?;
@@ -132,24 +161,15 @@ pub fn get_stream_info<P: AsRef<Path>>(path: P) -> Result<StreamInfo, DecoderErr
         .best(Type::Video)
         .ok_or(DecoderError::NoVideoStream)?;
 
-    let video_time_base = video_stream.time_base();
-    let video_codec_params = video_stream.parameters();
+    let codec_params = video_stream.parameters();
+    let decoder_ctx = codec::context::Context::from_parameters(codec_params.clone())?;
+    let decoder = decoder_ctx.decoder().video()?;
 
-    let (audio_time_base, audio_codec_params) =
-        if let Some(audio_stream) = input_ctx.streams().best(Type::Audio) {
-            (
-                Some(audio_stream.time_base()),
-                Some(audio_stream.parameters()),
-            )
-        } else {
-            (None, None)
-        };
-
-    Ok(StreamInfo {
-        video_time_base,
-        video_codec_params,
-        audio_time_base,
-        audio_codec_params,
+    Ok(VideoStreamInfo {
+        time_base: video_stream.time_base(),
+        codec_params,
+        width: decoder.width(),
+        height: decoder.height(),
     })
 }
 
@@ -165,42 +185,91 @@ fn pts_to_duration(pts: i64, time_base: Rational) -> Duration {
 }
 
 /**
-    Demux a video file, routing packets to video and audio queues.
-    Runs until EOF or stop flag is set.
+    Demux only audio packets from a video file.
+    Opens its own file handle - completely independent from video demux.
+    This is part of the separated pipeline architecture to prevent deadlocks.
 */
-pub fn demux<P: AsRef<Path>>(
+pub fn audio_demux<P: AsRef<Path>>(
     path: P,
-    video_packets: Arc<PacketQueue>,
-    audio_packets: Option<Arc<PacketQueue>>,
+    audio_packets: Arc<PacketQueue>,
     stop_flag: Arc<AtomicBool>,
 ) -> Result<(), DecoderError> {
     ffmpeg_next::init()?;
 
     let mut input_ctx = input(&path)?;
 
-    // Find stream indices
+    let audio_stream_index = input_ctx
+        .streams()
+        .best(Type::Audio)
+        .ok_or(DecoderError::NoAudioStream)?
+        .index();
+
+    let mut pkt_count = 0u64;
+
+    // Process all packets, but only extract audio
+    for (stream, packet) in input_ctx.packets() {
+        if stop_flag.load(Ordering::Relaxed) {
+            eprintln!("[audio_demux] stopped by flag");
+            break;
+        }
+
+        // ONLY process audio packets - skip everything else
+        if stream.index() == audio_stream_index {
+            let pkt = Packet::new(
+                packet.data().map(|d| d.to_vec()).unwrap_or_default(),
+                packet.pts().unwrap_or(0),
+                packet.dts().unwrap_or(0),
+                packet.duration(),
+                packet.flags().bits(),
+            );
+            if !audio_packets.push(pkt) {
+                eprintln!("[audio_demux] queue closed");
+                break;
+            }
+            pkt_count += 1;
+            if pkt_count % 500 == 0 {
+                eprintln!("[audio_demux] packets: {}", pkt_count);
+            }
+        }
+    }
+
+    eprintln!("[audio_demux] finished - packets: {}", pkt_count);
+
+    audio_packets.close();
+    Ok(())
+}
+
+/**
+    Demux only video packets from a video file.
+    Opens its own file handle - completely independent from audio demux.
+    This is part of the separated pipeline architecture to prevent deadlocks.
+*/
+pub fn video_demux<P: AsRef<Path>>(
+    path: P,
+    video_packets: Arc<PacketQueue>,
+    stop_flag: Arc<AtomicBool>,
+) -> Result<(), DecoderError> {
+    ffmpeg_next::init()?;
+
+    let mut input_ctx = input(&path)?;
+
     let video_stream_index = input_ctx
         .streams()
         .best(Type::Video)
         .ok_or(DecoderError::NoVideoStream)?
         .index();
 
-    let audio_stream_index = input_ctx.streams().best(Type::Audio).map(|s| s.index());
+    let mut pkt_count = 0u64;
 
-    let mut video_pkt_count = 0u64;
-    let mut audio_pkt_count = 0u64;
-
-    // Process all packets
+    // Process all packets, but only extract video
     for (stream, packet) in input_ctx.packets() {
         if stop_flag.load(Ordering::Relaxed) {
-            eprintln!("[demux] stopped by flag");
+            eprintln!("[video_demux] stopped by flag");
             break;
         }
 
-        let stream_index = stream.index();
-
-        if stream_index == video_stream_index {
-            // Route to video packet queue
+        // ONLY process video packets - skip everything else
+        if stream.index() == video_stream_index {
             let pkt = Packet::new(
                 packet.data().map(|d| d.to_vec()).unwrap_or_default(),
                 packet.pts().unwrap_or(0),
@@ -209,46 +278,19 @@ pub fn demux<P: AsRef<Path>>(
                 packet.flags().bits(),
             );
             if !video_packets.push(pkt) {
-                eprintln!("[demux] video queue closed");
-                break; // Queue closed
+                eprintln!("[video_demux] queue closed");
+                break;
             }
-            video_pkt_count += 1;
-            if video_pkt_count % 500 == 0 {
-                eprintln!(
-                    "[demux] video packets: {}, audio packets: {}",
-                    video_pkt_count, audio_pkt_count
-                );
-            }
-        } else if Some(stream_index) == audio_stream_index {
-            if let Some(ref audio_queue) = audio_packets {
-                // Route to audio packet queue
-                let pkt = Packet::new(
-                    packet.data().map(|d| d.to_vec()).unwrap_or_default(),
-                    packet.pts().unwrap_or(0),
-                    packet.dts().unwrap_or(0),
-                    packet.duration(),
-                    packet.flags().bits(),
-                );
-                if !audio_queue.push(pkt) {
-                    eprintln!("[demux] audio queue closed");
-                    break; // Queue closed
-                }
-                audio_pkt_count += 1;
+            pkt_count += 1;
+            if pkt_count % 500 == 0 {
+                eprintln!("[video_demux] packets: {}", pkt_count);
             }
         }
     }
 
-    eprintln!(
-        "[demux] finished - video: {}, audio: {}",
-        video_pkt_count, audio_pkt_count
-    );
+    eprintln!("[video_demux] finished - packets: {}", pkt_count);
 
-    // Signal EOF to decode threads
     video_packets.close();
-    if let Some(ref audio_queue) = audio_packets {
-        audio_queue.close();
-    }
-
     Ok(())
 }
 
