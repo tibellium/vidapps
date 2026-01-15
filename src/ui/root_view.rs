@@ -1,10 +1,9 @@
-use std::sync::Arc;
-use std::time::Instant;
-
 use std::rc::Rc;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use gpui::{
-    Context, Entity, IntoElement, Pixels, PlatformDisplay, Point, Render, Size, Window, div,
+    Context, Entity, IntoElement, Pixels, PlatformDisplay, Point, Render, Size, Timer, Window, div,
     prelude::*, rgb,
 };
 
@@ -17,6 +16,9 @@ use super::grid_view::GridView;
 /// Minimum time between window state saves (to avoid excessive disk writes during resize)
 const SAVE_DEBOUNCE_SECS: f32 = 1.0;
 
+/// How often to check for new videos (in milliseconds)
+const VIDEO_POLL_INTERVAL_MS: u64 = 100;
+
 /// The root view of the application.
 ///
 /// Contains the video grid and handles window resize events to reconfigure the grid.
@@ -26,6 +28,7 @@ pub struct RootView {
     last_size: Option<Size<Pixels>>,
     last_origin: Option<Point<Pixels>>,
     last_save_time: Option<Instant>,
+    last_video_count: usize,
 }
 
 impl RootView {
@@ -34,13 +37,47 @@ impl RootView {
         let ready_videos_clone = Arc::clone(&ready_videos);
         let grid = cx.new(|cx| GridView::new(ready_videos_clone, cx));
 
+        // Start polling for new videos
+        cx.spawn(async move |this, mut cx| {
+            loop {
+                Timer::after(Duration::from_millis(VIDEO_POLL_INTERVAL_MS)).await;
+                let should_stop = cx
+                    .update(|cx| {
+                        this.update(cx, |this, cx| this.check_for_new_videos(cx))
+                            .unwrap_or(true)
+                    })
+                    .unwrap_or(true);
+                if should_stop {
+                    break;
+                }
+            }
+        })
+        .detach();
+
         Self {
             grid,
             ready_videos,
             last_size: None,
             last_origin: None,
             last_save_time: None,
+            last_video_count: 0,
         }
+    }
+
+    /// Check if new videos have been added and fill empty slots.
+    /// Returns true if polling should stop (grid is full).
+    fn check_for_new_videos(&mut self, cx: &mut Context<Self>) -> bool {
+        let current_count = self.ready_videos.len();
+        if current_count > self.last_video_count {
+            self.last_video_count = current_count;
+            self.grid.update(cx, |grid, cx| {
+                grid.fill_empty_slots(cx);
+            });
+        }
+
+        // Stop polling once we have enough videos to fill the grid
+        let grid_slots = self.grid.read(cx).config().total_slots() as usize;
+        current_count >= grid_slots && grid_slots > 0
     }
 
     /// Get the grid view entity.

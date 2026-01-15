@@ -175,26 +175,9 @@ fn open_app_with_paths(paths: Vec<PathBuf>, cx: &mut App) {
         paths.len()
     );
 
-    // Process videos on a dedicated thread to avoid blocking the UI
+    // Process videos in parallel using 8 worker threads
     let ready_videos_for_scan = Arc::clone(&ready_videos);
     std::thread::spawn(move || {
-        let scanner = VideoScanner::new(ready_videos_for_scan);
-
-        for path in candidates.iter() {
-            // Probe the video (blocking ffprobe call)
-            scanner.probe_and_add(path);
-        }
-
-        println!(
-            "\nScanning complete. {} valid videos found.",
-            scanner.ready_videos.len()
-        );
-
-        if scanner.ready_videos.is_empty() {
-            eprintln!("No valid video files found in selected paths.");
-            eprintln!(
-                "Supported formats: mp4, mov, avi, mkv, webm, m4v, wmv, flv, mpeg, mpg, 3gp, ts, mts"
-            );
-        }
+        VideoScanner::probe_all_parallel(ready_videos_for_scan, candidates);
     });
 }
