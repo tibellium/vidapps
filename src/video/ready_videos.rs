@@ -3,55 +3,92 @@ use std::sync::RwLock;
 
 use rand::seq::SliceRandom;
 
+use crate::ui::VideoOrientation;
+
 use super::VideoInfo;
 
-/// Thread-safe storage for validated video files.
+/// Thread-safe storage for validated video files, organized by orientation.
 ///
 /// Videos are added to this storage after being validated by ffprobe.
-/// The GridView pulls videos from here when filling slots.
+/// The GridView pulls videos from here when filling slots, filtered by orientation.
 pub struct ReadyVideos {
-    videos: RwLock<Vec<VideoInfo>>,
+    landscape: RwLock<Vec<VideoInfo>>,
+    portrait: RwLock<Vec<VideoInfo>>,
 }
 
 impl ReadyVideos {
     /// Create a new empty ReadyVideos storage.
     pub fn new() -> Self {
         Self {
-            videos: RwLock::new(Vec::new()),
+            landscape: RwLock::new(Vec::new()),
+            portrait: RwLock::new(Vec::new()),
         }
     }
 
-    /// Add a validated video to the storage.
+    /// Add a validated video to the appropriate storage based on orientation.
     pub fn push(&self, info: VideoInfo) {
-        let mut videos = self.videos.write().unwrap();
-        videos.push(info);
+        match info.orientation() {
+            VideoOrientation::Landscape => {
+                self.landscape.write().unwrap().push(info);
+            }
+            VideoOrientation::Portrait => {
+                self.portrait.write().unwrap().push(info);
+            }
+        }
     }
 
-    /// Get the number of ready videos.
+    /// Get the total number of ready videos (both orientations).
     pub fn len(&self) -> usize {
-        self.videos.read().unwrap().len()
+        self.landscape.read().unwrap().len() + self.portrait.read().unwrap().len()
     }
 
-    /// Check if the storage is empty.
+    /// Get the number of videos for a specific orientation.
+    pub fn len_for_orientation(&self, orientation: VideoOrientation) -> usize {
+        match orientation {
+            VideoOrientation::Landscape => self.landscape.read().unwrap().len(),
+            VideoOrientation::Portrait => self.portrait.read().unwrap().len(),
+        }
+    }
+
+    /// Check if the storage is empty (both orientations).
     pub fn is_empty(&self) -> bool {
-        self.videos.read().unwrap().is_empty()
+        self.landscape.read().unwrap().is_empty() && self.portrait.read().unwrap().is_empty()
     }
 
-    /// Pick a random video from the storage.
+    /// Check if a specific orientation has videos.
+    pub fn has_videos_for_orientation(&self, orientation: VideoOrientation) -> bool {
+        match orientation {
+            VideoOrientation::Landscape => !self.landscape.read().unwrap().is_empty(),
+            VideoOrientation::Portrait => !self.portrait.read().unwrap().is_empty(),
+        }
+    }
+
+    /// Pick a random video of the specified orientation.
     ///
-    /// Returns None if the storage is empty.
-    pub fn pick_random(&self) -> Option<VideoInfo> {
-        let videos = self.videos.read().unwrap();
+    /// Returns None if no videos of that orientation are available.
+    pub fn pick_random_for_orientation(&self, orientation: VideoOrientation) -> Option<VideoInfo> {
+        let videos = match orientation {
+            VideoOrientation::Landscape => self.landscape.read().unwrap(),
+            VideoOrientation::Portrait => self.portrait.read().unwrap(),
+        };
         let mut rng = rand::thread_rng();
         videos.choose(&mut rng).cloned()
     }
 
-    /// Pick a random video that is not in the exclusion list.
+    /// Pick a random video of the specified orientation that is not in the exclusion list.
     ///
-    /// If all videos are in the exclusion list, falls back to picking any random video.
-    /// Returns None if the storage is empty.
-    pub fn pick_random_except(&self, exclude: &[PathBuf]) -> Option<VideoInfo> {
-        let videos = self.videos.read().unwrap();
+    /// If all videos of that orientation are excluded, falls back to picking any video of that orientation.
+    /// Returns None if no videos of that orientation are available.
+    pub fn pick_random_except_for_orientation(
+        &self,
+        orientation: VideoOrientation,
+        exclude: &[PathBuf],
+    ) -> Option<VideoInfo> {
+        let videos = match orientation {
+            VideoOrientation::Landscape => self.landscape.read().unwrap(),
+            VideoOrientation::Portrait => self.portrait.read().unwrap(),
+        };
+
         if videos.is_empty() {
             return None;
         }
@@ -65,21 +102,11 @@ impl ReadyVideos {
             .collect();
 
         if available.is_empty() {
-            // Fall back to any video if all are excluded
+            // Fall back to any video of this orientation if all are excluded
             videos.choose(&mut rng).cloned()
         } else {
             available.choose(&mut rng).cloned().cloned()
         }
-    }
-
-    /// Get all video paths currently in storage.
-    pub fn all_paths(&self) -> Vec<PathBuf> {
-        self.videos
-            .read()
-            .unwrap()
-            .iter()
-            .map(|v| v.path.clone())
-            .collect()
     }
 }
 

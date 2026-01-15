@@ -8,6 +8,6 @@ mod video_slot;
 
 pub use actions::register_shortcuts;
 pub use app_state::AppState;
-pub use grid_config::GridConfig;
+pub use grid_config::{GridConfig, VideoOrientation};
 pub use grid_view::GridView;
 pub use root_view::RootView;

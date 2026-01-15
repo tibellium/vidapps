@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::ui::VideoOrientation;
+
 /// Metadata about a video file, obtained via ffprobe.
 #[derive(Debug, Clone)]
 pub struct VideoInfo {
@@ -28,5 +30,10 @@ impl VideoInfo {
     /// Calculate the aspect ratio (width / height).
     pub fn aspect_ratio(&self) -> f32 {
         self.width as f32 / self.height as f32
+    }
+
+    /// Get the orientation category for this video.
+    pub fn orientation(&self) -> VideoOrientation {
+        VideoOrientation::from_aspect_ratio(self.aspect_ratio())
     }
 }

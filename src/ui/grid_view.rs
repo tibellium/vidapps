@@ -14,6 +14,7 @@ use super::video_slot::{VideoEnded, VideoSlot};
 ///
 /// Uses VideoSlot entities for each video position and subscribes to their
 /// VideoEnded events for automatic video replacement.
+/// Videos are filtered by orientation to match the grid's orientation.
 pub struct GridView {
     slots: Vec<Entity<VideoSlot>>,
     config: GridConfig,
@@ -22,7 +23,7 @@ pub struct GridView {
 
 impl GridView {
     /// Create a new empty grid view that will pull videos from the given storage.
-    pub fn new(ready_videos: Arc<ReadyVideos>, cx: &mut Context<Self>) -> Self {
+    pub fn new(ready_videos: Arc<ReadyVideos>, _cx: &mut Context<Self>) -> Self {
         Self {
             slots: Vec::new(),
             config: GridConfig::default(),
@@ -37,17 +38,38 @@ impl GridView {
 
     /// Reconfigure the grid to the new configuration.
     ///
-    /// This will add or remove slots as needed. If slots are added,
-    /// they will be filled with videos from the ready pool.
+    /// This will clear all slots and refill them if the orientation changes,
+    /// or add/remove slots if only the count changes.
     pub fn reconfigure(&mut self, new_config: GridConfig, cx: &mut Context<Self>) {
         if new_config == self.config && !self.slots.is_empty() {
             return; // No change needed
         }
 
+        let orientation_changed = new_config.orientation != self.config.orientation;
         let old_count = self.slots.len();
         let new_count = new_config.total_slots() as usize;
 
-        if new_count > old_count {
+        if orientation_changed {
+            // Clear all slots when orientation changes - we need different videos
+            let app_state = cx.global::<AppState>();
+            let mixer = Arc::clone(&app_state.mixer);
+
+            for index in 0..old_count {
+                mixer.set_stream(index, None);
+            }
+
+            self.slots.clear();
+            cx.update_global::<AppState, _>(|state, _cx| {
+                state.truncate_players(0);
+            });
+
+            // Update config first so fill_empty_slots uses the right orientation
+            self.config = new_config;
+
+            // Fill with new videos of the correct orientation
+            self.fill_empty_slots(cx);
+        } else if new_count > old_count {
+            self.config = new_config;
             // Add new slots
             for index in old_count..new_count {
                 if let Some(slot) = self.create_slot(index, cx) {
@@ -69,30 +91,38 @@ impl GridView {
             cx.update_global::<AppState, _>(|state, _cx| {
                 state.truncate_players(new_count);
             });
+
+            self.config = new_config;
         }
 
-        self.config = new_config;
         cx.notify();
     }
 
     /// Try to fill any empty slots with videos from the ready pool.
     pub fn fill_empty_slots(&mut self, cx: &mut Context<Self>) {
         let target_count = self.config.total_slots() as usize;
+        let orientation = self.config.orientation;
 
         // First, ensure we have enough slot entities
         while self.slots.len() < target_count {
-            if let Some(slot) = self.create_slot(self.slots.len(), cx) {
+            if let Some(slot) = self.create_slot_for_orientation(self.slots.len(), orientation, cx)
+            {
                 self.slots.push(slot);
             } else {
-                break; // No more videos available
+                break; // No more videos available for this orientation
             }
         }
 
         cx.notify();
     }
 
-    /// Create a new slot at the given index with a video from the ready pool.
-    fn create_slot(&self, index: usize, cx: &mut Context<Self>) -> Option<Entity<VideoSlot>> {
+    /// Create a new slot at the given index with a video of the specified orientation.
+    fn create_slot_for_orientation(
+        &self,
+        index: usize,
+        orientation: crate::ui::grid_config::VideoOrientation,
+        cx: &mut Context<Self>,
+    ) -> Option<Entity<VideoSlot>> {
         // Get paths of currently playing videos
         let current_paths: Vec<_> = self
             .slots
@@ -100,8 +130,10 @@ impl GridView {
             .map(|slot| slot.read(cx).video_info().path.clone())
             .collect();
 
-        // Pick a video not currently playing
-        let video_info = self.ready_videos.pick_random_except(&current_paths)?;
+        // Pick a video of the correct orientation not currently playing
+        let video_info = self
+            .ready_videos
+            .pick_random_except_for_orientation(orientation, &current_paths)?;
 
         // Create the player
         let player = match VideoPlayer::with_options(&video_info.path, None, None) {
@@ -113,8 +145,9 @@ impl GridView {
         };
 
         println!(
-            "Slot {}: {}",
+            "Slot {} ({:?}): {}",
             index,
+            orientation,
             video_info
                 .path
                 .file_name()
@@ -141,6 +174,11 @@ impl GridView {
         Some(slot)
     }
 
+    /// Create a new slot using the current grid's orientation.
+    fn create_slot(&self, index: usize, cx: &mut Context<Self>) -> Option<Entity<VideoSlot>> {
+        self.create_slot_for_orientation(index, self.config.orientation, cx)
+    }
+
     /// Handle VideoEnded event from a slot - replace the video.
     fn on_video_ended(
         &mut self,
@@ -158,6 +196,8 @@ impl GridView {
             return;
         }
 
+        let orientation = self.config.orientation;
+
         // Get paths of currently playing videos (excluding the one being replaced)
         let current_paths: Vec<_> = self
             .slots
@@ -167,10 +207,13 @@ impl GridView {
             .map(|(_, slot)| slot.read(cx).video_info().path.clone())
             .collect();
 
-        // Pick a video not currently playing
-        let video_info = match self.ready_videos.pick_random_except(&current_paths) {
+        // Pick a video of the correct orientation not currently playing
+        let video_info = match self
+            .ready_videos
+            .pick_random_except_for_orientation(orientation, &current_paths)
+        {
             Some(info) => info,
-            None => return, // No videos available
+            None => return, // No videos available for this orientation
         };
 
         // Create new player
@@ -183,8 +226,9 @@ impl GridView {
         };
 
         println!(
-            "Slot {}: replaced with {}",
+            "Slot {} ({:?}): replaced with {}",
             index,
+            orientation,
             video_info
                 .path
                 .file_name()
@@ -245,9 +289,12 @@ impl GridView {
 
 impl Render for GridView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Try to fill empty slots if videos are available
+        // Try to fill empty slots if videos of the right orientation are available
         let target_slots = self.config.total_slots() as usize;
-        if self.slots.len() < target_slots && !self.ready_videos.is_empty() {
+        let orientation = self.config.orientation;
+        if self.slots.len() < target_slots
+            && self.ready_videos.has_videos_for_orientation(orientation)
+        {
             self.fill_empty_slots(cx);
         }
 
