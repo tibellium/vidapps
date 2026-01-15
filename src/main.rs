@@ -1,8 +1,9 @@
 /*!
     2x2 Randomized Video Grid Player
 
-    Opens a folder, finds all videos, and plays 4 random videos in a grid.
-    When a video ends, it's replaced with a new random video from the folder.
+    Select video files and/or folders, and plays 4 random videos in a grid.
+    When a video ends, it's replaced with a new random video from the pool.
+    Folders are scanned recursively for video files.
 
     Keyboard Controls:
     - Space: Pause/Resume all videos
@@ -16,6 +17,7 @@
     Usage:
       cargo run --release
       cargo run --release -- /path/to/videos
+      cargo run --release -- /path/to/folder1 /path/to/video.mp4 /path/to/folder2
 */
 
 use std::path::PathBuf;
@@ -43,22 +45,42 @@ const VIDEO_EXTENSIONS: &[&str] = &[
 const DEFAULT_WIDTH: u32 = 1280;
 const DEFAULT_HEIGHT: u32 = 720;
 
-/// Recursively scan a directory for video files
-fn scan_for_videos(folder: &PathBuf) -> Vec<PathBuf> {
-    WalkDir::new(folder)
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .filter(|e| {
-            e.path()
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .map(|ext| VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
-                .unwrap_or(false)
-        })
-        .map(|e| e.path().to_path_buf())
-        .collect()
+/// Check if a path has a video extension
+fn is_video_file(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+/// Scan paths for video files, recursively scanning directories
+fn scan_for_videos(paths: &[PathBuf]) -> Vec<PathBuf> {
+    let mut videos = Vec::new();
+
+    for path in paths {
+        if path.is_file() {
+            // Direct file - check if it's a video
+            if is_video_file(path) {
+                videos.push(path.clone());
+            }
+        } else if path.is_dir() {
+            // Directory - recursively scan for videos
+            let dir_videos: Vec<PathBuf> = WalkDir::new(path)
+                .follow_links(true)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_type().is_file())
+                .filter(|e| is_video_file(e.path()))
+                .map(|e| e.path().to_path_buf())
+                .collect();
+            videos.extend(dir_videos);
+        }
+    }
+
+    // Remove duplicates (in case same file was selected multiple ways)
+    videos.sort();
+    videos.dedup();
+    videos
 }
 
 /// Pick n random videos from the list (with repetition if fewer than n videos)
@@ -79,23 +101,23 @@ fn main() {
         // Register keyboard shortcuts at the app level
         register_shortcuts(cx);
 
-        let folder_path: Option<PathBuf> = std::env::args().nth(1).map(PathBuf::from);
+        let cli_paths: Vec<PathBuf> = std::env::args().skip(1).map(PathBuf::from).collect();
 
-        if let Some(path) = folder_path {
-            open_grid_with_folder(path, cx);
+        if !cli_paths.is_empty() {
+            open_grid_with_paths(cli_paths, cx);
         } else {
             let future = cx.prompt_for_paths(gpui::PathPromptOptions {
-                files: false,
+                files: true,
                 directories: true,
-                multiple: false,
-                prompt: Some("Select video folder".into()),
+                multiple: true,
+                prompt: Some("Select videos or folders".into()),
             });
 
             cx.spawn(async |cx: &mut AsyncApp| {
                 if let Ok(Ok(Some(paths))) = future.await {
-                    if let Some(path) = paths.into_iter().next() {
+                    if !paths.is_empty() {
                         cx.update(|cx| {
-                            open_grid_with_folder(path, cx);
+                            open_grid_with_paths(paths, cx);
                         })
                         .ok();
                     }
@@ -106,17 +128,21 @@ fn main() {
     });
 }
 
-fn open_grid_with_folder(folder: PathBuf, cx: &mut App) {
-    let all_videos = scan_for_videos(&folder);
+fn open_grid_with_paths(paths: Vec<PathBuf>, cx: &mut App) {
+    let all_videos = scan_for_videos(&paths);
 
     if all_videos.is_empty() {
-        eprintln!("No video files found in {:?}", folder);
+        eprintln!("No video files found in selected paths");
         eprintln!("Supported formats: {}", VIDEO_EXTENSIONS.join(", "));
         cx.quit();
         return;
     }
 
-    println!("Found {} videos in {:?}", all_videos.len(), folder);
+    println!(
+        "Found {} videos from {} selected path(s)",
+        all_videos.len(),
+        paths.len()
+    );
 
     // Initialize audio mixer
     let mixer = Arc::new(AudioMixer::new(DEFAULT_SAMPLE_RATE, DEFAULT_CHANNELS));
@@ -163,10 +189,14 @@ fn open_grid_with_folder(folder: PathBuf, cx: &mut App) {
     // Set up global application state (includes players for pause/resume)
     cx.set_global(AppState::new(all_videos, Arc::clone(&mixer), players));
 
-    let folder_name = folder
-        .file_name()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "Video Grid".to_string());
+    let window_title = if paths.len() == 1 {
+        paths[0]
+            .file_name()
+            .map(|s| format!("Video Grid - {}", s.to_string_lossy()))
+            .unwrap_or_else(|| "Video Grid".to_string())
+    } else {
+        format!("Video Grid - {} sources", paths.len())
+    };
 
     let bounds = Bounds::centered(
         None,
@@ -200,7 +230,7 @@ fn open_grid_with_folder(folder: PathBuf, cx: &mut App) {
             focus: true,
             kind: gpui::WindowKind::PopUp,
             titlebar: Some(gpui::TitlebarOptions {
-                title: Some(format!("Video Grid - {}", folder_name).into()),
+                title: Some(window_title.into()),
                 appears_transparent: false,
                 ..Default::default()
             }),
