@@ -130,6 +130,7 @@ async fn main() -> Result<()> {
     println!("\nPhase 3: Monitoring for DRM/license requests...\n");
 
     let mut pssh: Option<String> = None;
+    let mut mpd_url: Option<String> = None;
     let mut license_url: Option<String> = None;
 
     while let Some(request) = requests.next().await {
@@ -161,6 +162,12 @@ async fn main() -> Result<()> {
                         }
 
                         pssh = Some(extracted_pssh);
+                        mpd_url = Some(url.clone());
+
+                        // Save MPD URL to file
+                        if std::fs::write("mpd_url.txt", &url).is_ok() {
+                            println!("Saved MPD URL to: mpd_url.txt");
+                        }
 
                         // Save MPD to file
                         if std::fs::write("manifest.mpd", &body).is_ok() {
