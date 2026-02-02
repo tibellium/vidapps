@@ -72,7 +72,7 @@ impl AudioDecoder {
         Get the number of channels.
     */
     pub fn channels(&self) -> u16 {
-        self.decoder.channels() as u16
+        self.decoder.channels()
     }
 
     /**
@@ -199,7 +199,7 @@ impl AudioDecoder {
     fn convert_frame(&self, frame: &AudioFrameFFmpeg) -> Result<AudioFrame> {
         let samples = frame.samples();
         let sample_rate = frame.rate();
-        let channel_count = frame.channels() as u16;
+        let channel_count = frame.channels();
 
         if samples == 0 {
             return Err(Error::invalid_data("audio frame has zero samples"));

@@ -55,4 +55,4 @@ mod source;
 
 pub use codec_config::CodecConfig;
 pub use probe::probe;
-pub use source::{Source, SourceConfig, StreamFilter, open, open_with_config};
+pub use source::{NetworkOptions, Source, SourceConfig, StreamFilter, open, open_with_config};

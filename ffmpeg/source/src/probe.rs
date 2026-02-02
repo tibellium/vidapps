@@ -5,7 +5,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use ffmpeg_next::{format::context::Input as InputContext, media::Type};
+use ffmpeg_next::{ffi, format::context::Input as InputContext, media::Type};
 
 use ffmpeg_types::{AudioStreamInfo, CodecId, Error, MediaInfo, Result, VideoStreamInfo};
 
@@ -108,6 +108,44 @@ fn extract_video_stream_info(input_ctx: &InputContext) -> Option<VideoStreamInfo
         None
     };
 
+    // Extract extradata, bitrate, profile, level from codec parameters
+    // SAFETY: We're reading from a valid AVCodecParameters pointer that FFmpeg owns
+    let (extradata, bitrate, profile, level) = unsafe {
+        let ptr = stream.parameters().as_ptr();
+
+        // Extract extradata (SPS/PPS for H.264, etc.)
+        let extradata = if (*ptr).extradata_size > 0 && !(*ptr).extradata.is_null() {
+            let slice =
+                std::slice::from_raw_parts((*ptr).extradata, (*ptr).extradata_size as usize);
+            Some(slice.to_vec())
+        } else {
+            None
+        };
+
+        // Extract bitrate
+        let bitrate = if (*ptr).bit_rate > 0 {
+            Some((*ptr).bit_rate as u64)
+        } else {
+            None
+        };
+
+        // Extract profile
+        let profile = if (*ptr).profile != ffi::FF_PROFILE_UNKNOWN {
+            Some((*ptr).profile)
+        } else {
+            None
+        };
+
+        // Extract level
+        let level = if (*ptr).level != ffi::AV_LEVEL_UNKNOWN {
+            Some((*ptr).level)
+        } else {
+            None
+        };
+
+        (extradata, bitrate, profile, level)
+    };
+
     Some(VideoStreamInfo {
         width: decoder.width(),
         height: decoder.height(),
@@ -116,6 +154,10 @@ fn extract_video_stream_info(input_ctx: &InputContext) -> Option<VideoStreamInfo
         time_base,
         duration,
         codec_id,
+        extradata,
+        bitrate,
+        profile,
+        level,
     })
 }
 
@@ -145,8 +187,39 @@ fn extract_audio_stream_info(input_ctx: &InputContext) -> Option<AudioStreamInfo
     let decoder = decoder_ctx.decoder().audio().ok()?;
 
     let sample_format = sample_format_from_ffmpeg(decoder.format())?;
-    let channels = channel_layout_from_count(decoder.channels() as u16);
+    let channels = channel_layout_from_count(decoder.channels());
     let codec_id = codec_id_from_ffmpeg(stream.parameters().id()).unwrap_or(CodecId::Aac); // Default to AAC if unknown
+
+    // Extract extradata, bitrate, profile from codec parameters
+    // SAFETY: We're reading from a valid AVCodecParameters pointer that FFmpeg owns
+    let (extradata, bitrate, profile) = unsafe {
+        let ptr = stream.parameters().as_ptr();
+
+        // Extract extradata (AudioSpecificConfig for AAC, etc.)
+        let extradata = if (*ptr).extradata_size > 0 && !(*ptr).extradata.is_null() {
+            let slice =
+                std::slice::from_raw_parts((*ptr).extradata, (*ptr).extradata_size as usize);
+            Some(slice.to_vec())
+        } else {
+            None
+        };
+
+        // Extract bitrate
+        let bitrate = if (*ptr).bit_rate > 0 {
+            Some((*ptr).bit_rate as u64)
+        } else {
+            None
+        };
+
+        // Extract profile
+        let profile = if (*ptr).profile != ffi::FF_PROFILE_UNKNOWN {
+            Some((*ptr).profile)
+        } else {
+            None
+        };
+
+        (extradata, bitrate, profile)
+    };
 
     Some(AudioStreamInfo {
         sample_rate: decoder.rate(),
@@ -155,5 +228,8 @@ fn extract_audio_stream_info(input_ctx: &InputContext) -> Option<AudioStreamInfo
         time_base,
         duration,
         codec_id,
+        extradata,
+        bitrate,
+        profile,
     })
 }

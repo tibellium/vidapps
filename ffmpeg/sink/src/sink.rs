@@ -289,6 +289,35 @@ fn set_video_parameters(params: &Parameters, info: &VideoStreamInfo) -> Result<(
             PixelFormat::Rgba => ffi::AVPixelFormat::AV_PIX_FMT_RGBA as i32,
             _ => ffi::AVPixelFormat::AV_PIX_FMT_YUV420P as i32,
         };
+
+        // Set extradata if present (critical for remuxing - contains SPS/PPS for H.264, etc.)
+        if let Some(ref extradata) = info.extradata {
+            if !extradata.is_empty() {
+                // Allocate buffer with padding (FFmpeg requires AV_INPUT_BUFFER_PADDING_SIZE)
+                let alloc_size = extradata.len() + ffi::AV_INPUT_BUFFER_PADDING_SIZE as usize;
+                let buf = ffi::av_mallocz(alloc_size) as *mut u8;
+                if !buf.is_null() {
+                    std::ptr::copy_nonoverlapping(extradata.as_ptr(), buf, extradata.len());
+                    (*ptr).extradata = buf;
+                    (*ptr).extradata_size = extradata.len() as i32;
+                }
+            }
+        }
+
+        // Set bitrate if present
+        if let Some(bitrate) = info.bitrate {
+            (*ptr).bit_rate = bitrate as i64;
+        }
+
+        // Set profile if present
+        if let Some(profile) = info.profile {
+            (*ptr).profile = profile;
+        }
+
+        // Set level if present
+        if let Some(level) = info.level {
+            (*ptr).level = level;
+        }
     }
 
     Ok(())
@@ -328,6 +357,30 @@ fn set_audio_parameters(params: &Parameters, info: &AudioStreamInfo) -> Result<(
             SampleFormat::U8 => ffi::AVSampleFormat::AV_SAMPLE_FMT_U8 as i32,
             _ => ffi::AVSampleFormat::AV_SAMPLE_FMT_FLT as i32,
         };
+
+        // Set extradata if present (critical for remuxing - contains AudioSpecificConfig for AAC, etc.)
+        if let Some(ref extradata) = info.extradata {
+            if !extradata.is_empty() {
+                // Allocate buffer with padding (FFmpeg requires AV_INPUT_BUFFER_PADDING_SIZE)
+                let alloc_size = extradata.len() + ffi::AV_INPUT_BUFFER_PADDING_SIZE as usize;
+                let buf = ffi::av_mallocz(alloc_size) as *mut u8;
+                if !buf.is_null() {
+                    std::ptr::copy_nonoverlapping(extradata.as_ptr(), buf, extradata.len());
+                    (*ptr).extradata = buf;
+                    (*ptr).extradata_size = extradata.len() as i32;
+                }
+            }
+        }
+
+        // Set bitrate if present
+        if let Some(bitrate) = info.bitrate {
+            (*ptr).bit_rate = bitrate as i64;
+        }
+
+        // Set profile if present
+        if let Some(profile) = info.profile {
+            (*ptr).profile = profile;
+        }
     }
 
     Ok(())

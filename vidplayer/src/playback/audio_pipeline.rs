@@ -44,6 +44,7 @@ impl AudioPipeline {
             &path,
             SourceConfig {
                 stream_filter: Some(StreamFilter::AudioOnly),
+                ..Default::default()
             },
         )
         .ok()?;
@@ -213,6 +214,7 @@ fn audio_demux(
         path,
         SourceConfig {
             stream_filter: Some(StreamFilter::AudioOnly),
+            ..Default::default()
         },
     )?;
 
@@ -250,6 +252,7 @@ fn decode_audio_packets(
         path,
         SourceConfig {
             stream_filter: Some(StreamFilter::AudioOnly),
+            ..Default::default()
         },
     )?;
 

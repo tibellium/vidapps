@@ -25,6 +25,14 @@ pub struct VideoStreamInfo {
     pub duration: Option<Duration>,
     /// Codec used.
     pub codec_id: CodecId,
+    /// Codec extradata (SPS/PPS for H.264, VPS/SPS/PPS for H.265, etc.).
+    pub extradata: Option<Vec<u8>>,
+    /// Bitrate in bits per second (if known).
+    pub bitrate: Option<u64>,
+    /// Codec profile (codec-specific value, e.g., H.264 High Profile).
+    pub profile: Option<i32>,
+    /// Codec level (codec-specific value, e.g., H.264 Level 4.1).
+    pub level: Option<i32>,
 }
 
 impl VideoStreamInfo {
@@ -60,6 +68,12 @@ pub struct AudioStreamInfo {
     pub duration: Option<Duration>,
     /// Codec used.
     pub codec_id: CodecId,
+    /// Codec extradata (AudioSpecificConfig for AAC, etc.).
+    pub extradata: Option<Vec<u8>>,
+    /// Bitrate in bits per second (if known).
+    pub bitrate: Option<u64>,
+    /// Codec profile (codec-specific value, e.g., AAC LC, HE-AAC).
+    pub profile: Option<i32>,
 }
 
 impl AudioStreamInfo {
@@ -121,6 +135,10 @@ mod tests {
             time_base: Rational::new(1, 90000),
             duration: Some(Duration::from_secs(120)),
             codec_id: CodecId::H264,
+            extradata: None,
+            bitrate: None,
+            profile: None,
+            level: None,
         };
 
         let aspect = info.aspect_ratio();
@@ -137,6 +155,10 @@ mod tests {
             time_base: Rational::new(1, 90000),
             duration: None,
             codec_id: CodecId::H264,
+            extradata: None,
+            bitrate: None,
+            profile: None,
+            level: None,
         };
 
         assert_eq!(info.fps(), Some(30.0));
@@ -151,6 +173,9 @@ mod tests {
             time_base: Rational::new(1, 48000),
             duration: None,
             codec_id: CodecId::Aac,
+            extradata: None,
+            bitrate: None,
+            profile: None,
         };
 
         assert_eq!(info.channel_count(), 2);
@@ -170,6 +195,10 @@ mod tests {
             time_base: Rational::new(1, 1000),
             duration: None,
             codec_id: CodecId::H264,
+            extradata: None,
+            bitrate: None,
+            profile: None,
+            level: None,
         });
 
         assert!(info.has_video());

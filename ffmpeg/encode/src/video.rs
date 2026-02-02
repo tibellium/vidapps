@@ -126,6 +126,36 @@ impl VideoEncoder {
             den: self.time_base.num,
         };
 
+        // Extract extradata, bitrate, profile, and level from encoder context
+        let (extradata, bitrate, profile, level) = unsafe {
+            let ctx_ptr = self.encoder.as_ptr();
+            let extradata = if (*ctx_ptr).extradata_size > 0 && !(*ctx_ptr).extradata.is_null() {
+                let slice = std::slice::from_raw_parts(
+                    (*ctx_ptr).extradata,
+                    (*ctx_ptr).extradata_size as usize,
+                );
+                Some(slice.to_vec())
+            } else {
+                None
+            };
+            let bitrate = if (*ctx_ptr).bit_rate > 0 {
+                Some((*ctx_ptr).bit_rate as u64)
+            } else {
+                None
+            };
+            let profile = if (*ctx_ptr).profile != ffi::FF_PROFILE_UNKNOWN {
+                Some((*ctx_ptr).profile)
+            } else {
+                None
+            };
+            let level = if (*ctx_ptr).level != ffi::AV_LEVEL_UNKNOWN {
+                Some((*ctx_ptr).level)
+            } else {
+                None
+            };
+            (extradata, bitrate, profile, level)
+        };
+
         VideoStreamInfo {
             width: self.encoder.width(),
             height: self.encoder.height(),
@@ -134,6 +164,10 @@ impl VideoEncoder {
             time_base: self.time_base,
             duration: None,
             codec_id: CodecId::H264, // TODO: track actual codec
+            extradata,
+            bitrate,
+            profile,
+            level,
         }
     }
 

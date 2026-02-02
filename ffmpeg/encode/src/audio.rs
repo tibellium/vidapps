@@ -106,13 +106,41 @@ impl AudioEncoder {
         Get stream info for the muxer.
     */
     pub fn stream_info(&self) -> AudioStreamInfo {
+        // Extract extradata, bitrate, and profile from encoder context
+        let (extradata, bitrate, profile) = unsafe {
+            let ctx_ptr = self.encoder.as_ptr();
+            let extradata = if (*ctx_ptr).extradata_size > 0 && !(*ctx_ptr).extradata.is_null() {
+                let slice = std::slice::from_raw_parts(
+                    (*ctx_ptr).extradata,
+                    (*ctx_ptr).extradata_size as usize,
+                );
+                Some(slice.to_vec())
+            } else {
+                None
+            };
+            let bitrate = if (*ctx_ptr).bit_rate > 0 {
+                Some((*ctx_ptr).bit_rate as u64)
+            } else {
+                None
+            };
+            let profile = if (*ctx_ptr).profile != ffi::FF_PROFILE_UNKNOWN {
+                Some((*ctx_ptr).profile)
+            } else {
+                None
+            };
+            (extradata, bitrate, profile)
+        };
+
         AudioStreamInfo {
-            sample_rate: self.encoder.rate() as u32,
+            sample_rate: self.encoder.rate(),
             channels: ffmpeg_channel_layout_to_ours(self.encoder.channel_layout()),
             sample_format: ffmpeg_sample_format_to_ours(self.encoder.format()),
             time_base: self.time_base,
             duration: None,
             codec_id: CodecId::Aac, // TODO: track actual codec
+            extradata,
+            bitrate,
+            profile,
         }
     }
 

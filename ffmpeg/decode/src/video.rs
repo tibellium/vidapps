@@ -24,7 +24,11 @@ use crate::hw::{HwDeviceContext, is_hw_frame, transfer_hw_frame};
 pub struct VideoDecoder {
     decoder: VideoDecoderFFmpeg,
     time_base: Rational,
-    hw_context: Option<HwDeviceContext>,
+    /**
+        Kept alive to prevent the hardware device context from being dropped
+        while the decoder is using it. Not accessed directly after initialization.
+    */
+    _hw_context: Option<HwDeviceContext>,
     is_hw_accelerated: bool,
 }
 
@@ -72,7 +76,7 @@ impl VideoDecoder {
         Ok(Self {
             decoder,
             time_base,
-            hw_context,
+            _hw_context: hw_context,
             is_hw_accelerated,
         })
     }

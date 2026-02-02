@@ -210,6 +210,7 @@ fn video_demux(
         path,
         SourceConfig {
             stream_filter: Some(StreamFilter::VideoOnly),
+            ..Default::default()
         },
     )?;
 
@@ -249,6 +250,7 @@ fn decode_video_packets(
         path,
         SourceConfig {
             stream_filter: Some(StreamFilter::VideoOnly),
+            ..Default::default()
         },
     )?;
 
