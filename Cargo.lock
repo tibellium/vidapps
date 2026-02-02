@@ -1730,6 +1730,7 @@ dependencies = [
 name = "ffmpeg-source"
 version = "0.1.0"
 dependencies = [
+ "ffmpeg-next",
  "ffmpeg-types",
 ]
 
