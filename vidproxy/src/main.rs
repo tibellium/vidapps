@@ -32,6 +32,10 @@ struct Args {
     /// Segment duration in seconds
     #[arg(short = 'd', long, default_value = "4")]
     segment_duration: u64,
+
+    /// CENC decryption key (hex string, 32 chars for AES-128)
+    #[arg(short = 'k', long)]
+    decryption_key: Option<String>,
 }
 
 fn parse_headers(headers: &[String]) -> Vec<(String, String)> {
@@ -66,11 +70,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let proxy_shutdown_rx = shutdown_rx.clone();
     let input_url = args.input.clone();
     let segment_duration = Duration::from_secs(args.segment_duration);
+    let decryption_key = args.decryption_key.clone();
 
     let proxy_handle = tokio::task::spawn_blocking(move || {
         proxy::run_remux_pipeline(
             &input_url,
             &headers,
+            decryption_key.as_deref(),
             &output_dir,
             segment_duration,
             proxy_segment_manager,

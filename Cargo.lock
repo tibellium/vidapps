@@ -2013,7 +2013,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-decode"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1#0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1"
+source = "git+https://github.com/tibellium/crates?rev=f533b38c663ba2f73175b5ddebc287120fe997b8#f533b38c663ba2f73175b5ddebc287120fe997b8"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-source",
@@ -2034,7 +2034,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-sink"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1#0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1"
+source = "git+https://github.com/tibellium/crates?rev=f533b38c663ba2f73175b5ddebc287120fe997b8#f533b38c663ba2f73175b5ddebc287120fe997b8"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-types",
@@ -2043,7 +2043,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-source"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1#0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1"
+source = "git+https://github.com/tibellium/crates?rev=f533b38c663ba2f73175b5ddebc287120fe997b8#f533b38c663ba2f73175b5ddebc287120fe997b8"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-types",
@@ -2066,7 +2066,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-transform"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1#0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1"
+source = "git+https://github.com/tibellium/crates?rev=f533b38c663ba2f73175b5ddebc287120fe997b8#f533b38c663ba2f73175b5ddebc287120fe997b8"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-types",
@@ -2075,7 +2075,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-types"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1#0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1"
+source = "git+https://github.com/tibellium/crates?rev=f533b38c663ba2f73175b5ddebc287120fe997b8#f533b38c663ba2f73175b5ddebc287120fe997b8"
 dependencies = [
  "static_assertions",
 ]

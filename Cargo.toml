@@ -13,12 +13,12 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
-ffmpeg-types = { git = "https://github.com/tibellium/crates", rev = "0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1" }
-ffmpeg-source = { git = "https://github.com/tibellium/crates", rev = "0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1" }
-ffmpeg-decode = { git = "https://github.com/tibellium/crates", rev = "0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1" }
-ffmpeg-transform = { git = "https://github.com/tibellium/crates", rev = "0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1" }
-ffmpeg-encode = { git = "https://github.com/tibellium/crates", rev = "0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1" }
-ffmpeg-sink = { git = "https://github.com/tibellium/crates", rev = "0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1" }
+ffmpeg-types = { git = "https://github.com/tibellium/crates", rev = "f533b38c663ba2f73175b5ddebc287120fe997b8" }
+ffmpeg-source = { git = "https://github.com/tibellium/crates", rev = "f533b38c663ba2f73175b5ddebc287120fe997b8" }
+ffmpeg-decode = { git = "https://github.com/tibellium/crates", rev = "f533b38c663ba2f73175b5ddebc287120fe997b8" }
+ffmpeg-transform = { git = "https://github.com/tibellium/crates", rev = "f533b38c663ba2f73175b5ddebc287120fe997b8" }
+ffmpeg-encode = { git = "https://github.com/tibellium/crates", rev = "f533b38c663ba2f73175b5ddebc287120fe997b8" }
+ffmpeg-sink = { git = "https://github.com/tibellium/crates", rev = "f533b38c663ba2f73175b5ddebc287120fe997b8" }
 
 [profile.release]
 opt-level = 3

@@ -10,11 +10,12 @@ use ffmpeg_source::{NetworkOptions, Source, SourceConfig};
 use crate::segments::SegmentManager;
 
 /**
-    Run the remux pipeline: read from source HLS, write to local HLS.
+    Run the remux pipeline: read from source HLS/DASH, write to local HLS.
 */
 pub fn run_remux_pipeline(
     input_url: &str,
     headers: &[(String, String)],
+    decryption_key: Option<&str>,
     output_dir: &Path,
     segment_duration: Duration,
     segment_manager: Arc<SegmentManager>,
@@ -26,6 +27,12 @@ pub fn run_remux_pipeline(
         network_opts = network_opts.header(key, value);
     }
     network_opts = network_opts.reconnect();
+
+    // Add CENC decryption key if provided
+    if let Some(key) = decryption_key {
+        network_opts = network_opts.cenc_decryption_key(key);
+        println!("Using CENC decryption key: {}...", &key[..8.min(key.len())]);
+    }
 
     // Open source
     let source_config = SourceConfig::default().with_network_options(network_opts);
