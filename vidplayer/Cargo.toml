@@ -1,0 +1,38 @@
+[package]
+name = "vidplayer"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "vidplayer"
+path = "src/main.rs"
+
+[dependencies]
+# FFmpeg crate ecosystem
+ffmpeg-types = { path = "../ffmpeg/types" }
+ffmpeg-source = { path = "../ffmpeg/source" }
+ffmpeg-decode = { path = "../ffmpeg/decode" }
+ffmpeg-transform = { path = "../ffmpeg/transform" }
+
+# GUI framework
+gpui = "0.2"
+
+# Audio output
+cpal = "0.15"
+ringbuf = "0.4"
+
+# Concurrency
+parking_lot = "0.12"
+
+# Image handling
+image = "0.25"
+
+# Byte casting for audio samples
+bytemuck = { version = "1", features = ["derive"] }
+
+# Window state persistence
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "5"
+uuid = "1"

@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "vidwall",
+    "vidplayer",
     "ffmpeg/types",
     "ffmpeg/source",
     "ffmpeg/decode",
