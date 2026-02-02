@@ -1,0 +1,9 @@
+[package]
+name = "ffmpeg-sink"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Media output and muxing for the ffmpeg crate ecosystem"
+
+[dependencies]
+ffmpeg-types = { path = "../types" }
