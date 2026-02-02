@@ -7,3 +7,11 @@ description = "Media encoding for the ffmpeg crate ecosystem"
 
 [dependencies]
 ffmpeg-types = { path = "../types" }
+ffmpeg-next = "8"
+
+[features]
+default = []
+videotoolbox = []
+nvenc = []
+qsv = []
+vaapi = []
