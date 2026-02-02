@@ -218,6 +218,62 @@ async fn main() -> Result<()> {
                                     if std::fs::write("keys.txt", &cdrm_resp.message).is_ok() {
                                         println!("\nSaved keys to: keys.txt");
                                     }
+
+                                    // Test FFmpeg decryption
+                                    if let Some(ref mpd) = mpd_url {
+                                        println!("\n=== TESTING FFMPEG DECRYPTION ===\n");
+
+                                        // Parse keys (format: "kid:key\nkid:key\n...")
+                                        let keys: Vec<&str> = cdrm_resp
+                                            .message
+                                            .lines()
+                                            .filter(|l| l.contains(':'))
+                                            .collect();
+
+                                        if let Some(first_key_pair) = keys.first() {
+                                            // Extract just the key (after the colon)
+                                            let key_only = first_key_pair
+                                                .split(':')
+                                                .nth(1)
+                                                .unwrap_or(first_key_pair);
+
+                                            println!("Using key: {}", key_only);
+                                            println!("MPD URL: {}", mpd);
+
+                                            // Run FFmpeg to test decryption (5 seconds of video)
+                                            // Use -cenc_decryption_key (the actual FFmpeg option name)
+                                            let output = std::process::Command::new("ffmpeg")
+                                                .args([
+                                                    "-y",
+                                                    "-cenc_decryption_key",
+                                                    key_only,
+                                                    "-i",
+                                                    mpd,
+                                                    "-t",
+                                                    "5",
+                                                    "-c",
+                                                    "copy",
+                                                    "test_output.ts",
+                                                ])
+                                                .output();
+
+                                            match output {
+                                                Ok(out) => {
+                                                    if out.status.success() {
+                                                        println!("FFmpeg decryption SUCCESS!");
+                                                        println!("Output saved to: test_output.ts");
+                                                    } else {
+                                                        println!("FFmpeg decryption FAILED:");
+                                                        println!(
+                                                            "{}",
+                                                            String::from_utf8_lossy(&out.stderr)
+                                                        );
+                                                    }
+                                                }
+                                                Err(e) => println!("Failed to run FFmpeg: {}", e),
+                                            }
+                                        }
+                                    }
                                 }
                                 Err(e) => println!("Failed to parse CDRM response: {}", e),
                             }
