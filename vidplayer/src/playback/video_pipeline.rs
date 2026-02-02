@@ -257,13 +257,25 @@ fn decode_video_packets(
             break;
         }
 
-        let decoded_frames = decoder.decode(&packet)?;
+        let decoded_frames = match decoder.decode(&packet) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("[video_decode] decode error: {}", e);
+                continue;
+            }
+        };
         for frame in decoded_frames {
             if stop_flag.load(Ordering::Relaxed) {
                 break;
             }
 
-            let bgra_frame = transform.transform(&frame)?;
+            let bgra_frame = match transform.transform(&frame) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("[video_decode] transform error: {}", e);
+                    continue;
+                }
+            };
             let pts = bgra_frame.presentation_time().unwrap_or(Duration::ZERO);
 
             let video_frame =
@@ -276,13 +288,16 @@ fn decode_video_packets(
     }
 
     // Flush decoder
-    let remaining = decoder.flush()?;
+    let remaining = decoder.flush().unwrap_or_default();
     for frame in remaining {
         if stop_flag.load(Ordering::Relaxed) {
             break;
         }
 
-        let bgra_frame = transform.transform(&frame)?;
+        let bgra_frame = match transform.transform(&frame) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
         let pts = bgra_frame.presentation_time().unwrap_or(Duration::ZERO);
 
         let video_frame =

@@ -323,6 +323,8 @@ fn channel_layout_to_ffmpeg(layout: ChannelLayout) -> FFmpegChannelLayout {
     match layout {
         ChannelLayout::Mono => FFmpegChannelLayout::MONO,
         ChannelLayout::Stereo => FFmpegChannelLayout::STEREO,
+        ChannelLayout::Surround5_1 => FFmpegChannelLayout::_5POINT1,
+        ChannelLayout::Surround7_1 => FFmpegChannelLayout::_7POINT1,
         _ => FFmpegChannelLayout::STEREO, // Default fallback
     }
 }

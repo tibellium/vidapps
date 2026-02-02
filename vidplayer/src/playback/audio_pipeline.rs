@@ -27,6 +27,7 @@ pub struct AudioPipeline {
     stop_flag: Arc<AtomicBool>,
     packet_queue: Arc<PacketQueue>,
     clock: Arc<AudioClock>,
+    producer: Arc<AudioStreamProducer>,
 }
 
 impl AudioPipeline {
@@ -96,34 +97,26 @@ impl AudioPipeline {
             stop_flag,
             packet_queue,
             clock,
+            producer,
         })
     }
 
-    pub fn seek_to(&self, position: Duration) -> Arc<AudioStreamConsumer> {
+    pub fn seek_to(&self, position: Duration) {
         // Stop current threads
         self.stop_flag.store(true, Ordering::Relaxed);
         self.packet_queue.close();
 
-        // Capture state from old consumer
-        let (old_volume, old_muted, old_paused) = {
-            let inner = self.inner.lock().unwrap();
-            (
-                inner.consumer.volume(),
-                inner.consumer.is_muted(),
-                inner.consumer.is_paused(),
-            )
-        };
-
         // Wait for threads to finish
         {
             let mut inner = self.inner.lock().unwrap();
-            inner.consumer.mark_closed();
             if let Some(handle) = inner.demux_handle.take() {
                 let _ = handle.join();
             }
             if let Some(handle) = inner.decode_handle.take() {
                 let _ = handle.join();
             }
+            // Clear the ring buffer
+            inner.consumer.clear();
         }
 
         // Reset state
@@ -131,19 +124,11 @@ impl AudioPipeline {
         self.packet_queue.reopen();
         self.clock.reset_to(position);
 
-        // Create fresh producer/consumer
-        let audio_stream = AudioStream::with_clock(Arc::clone(&self.clock));
-        let new_producer = Arc::new(audio_stream.producer);
-        let new_consumer = audio_stream.consumer;
+        // Reopen the producer so it can push again
+        self.producer.reopen();
 
-        // Restore state
-        new_consumer.set_volume(old_volume);
-        if old_muted {
-            new_consumer.mute();
-        }
-        if old_paused {
-            new_consumer.pause();
-        }
+        // Get the existing producer - we need to keep using the same one
+        let producer = Arc::clone(&self.producer);
 
         // Spawn new threads
         let demux_handle = {
@@ -160,7 +145,7 @@ impl AudioPipeline {
         let decode_handle = {
             let path = self.path.clone();
             let packets = Arc::clone(&self.packet_queue);
-            let prod = Arc::clone(&new_producer);
+            let prod = Arc::clone(&producer);
             let stop = Arc::clone(&self.stop_flag);
             thread::spawn(move || {
                 if let Err(e) = decode_audio_packets(&path, packets, &prod, stop) {
@@ -169,15 +154,12 @@ impl AudioPipeline {
             })
         };
 
-        // Store new state
+        // Store new thread handles
         {
             let mut inner = self.inner.lock().unwrap();
             inner.demux_handle = Some(demux_handle);
             inner.decode_handle = Some(decode_handle);
-            inner.consumer = Arc::clone(&new_consumer);
         }
-
-        new_consumer
     }
 
     pub fn clock(&self) -> &Arc<AudioClock> {
@@ -282,12 +264,18 @@ fn decode_audio_packets(
             break;
         }
 
-        let frames = decoder.decode(&packet)?;
+        let frames = match decoder.decode(&packet) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
         for frame in frames {
             if stop_flag.load(Ordering::Relaxed) {
                 break;
             }
-            let transformed = transform.transform(&frame)?;
+            let transformed = match transform.transform(&frame) {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
             let samples: &[f32] = cast_slice(&transformed.data);
             if !producer.push(samples) {
                 return Ok(());
@@ -296,12 +284,15 @@ fn decode_audio_packets(
     }
 
     // Flush decoder
-    let remaining = decoder.flush()?;
+    let remaining = decoder.flush().unwrap_or_default();
     for frame in remaining {
         if stop_flag.load(Ordering::Relaxed) {
             break;
         }
-        let transformed = transform.transform(&frame)?;
+        let transformed = match transform.transform(&frame) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
         let samples: &[f32] = cast_slice(&transformed.data);
         if !producer.push(samples) {
             break;
@@ -309,7 +300,7 @@ fn decode_audio_packets(
     }
 
     // Flush transform
-    if let Some(final_frame) = transform.flush()? {
+    if let Ok(Some(final_frame)) = transform.flush() {
         let samples: &[f32] = cast_slice(&final_frame.data);
         let _ = producer.push(samples);
     }

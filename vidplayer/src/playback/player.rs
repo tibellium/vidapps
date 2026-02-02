@@ -70,6 +70,7 @@ pub struct VideoPlayer {
     playback_clock: PlaybackClock,
     current_frame: Mutex<Option<VideoFrame>>,
     next_frame: Mutex<Option<VideoFrame>>,
+    /// Base PTS from first frame - used to align video timeline with clock
     base_pts: Mutex<Option<Duration>>,
     duration: Duration,
     state: Mutex<PlaybackState>,
@@ -226,7 +227,7 @@ impl VideoPlayer {
             .unwrap_or(false)
     }
 
-    pub fn seek_to(&self, position: Duration) -> Option<Arc<AudioStreamConsumer>> {
+    pub fn seek_to(&self, position: Duration) {
         let position = position.min(self.duration);
         let was_paused = self.is_paused();
 
@@ -236,10 +237,9 @@ impl VideoPlayer {
         }
 
         // Seek audio pipeline
-        let new_consumer = self
-            .audio_pipeline
-            .as_ref()
-            .map(|audio| audio.seek_to(position));
+        if let Some(ref audio) = self.audio_pipeline {
+            audio.seek_to(position);
+        }
 
         // Reset playback clock
         self.playback_clock.seek_to(position);
@@ -265,18 +265,16 @@ impl VideoPlayer {
         if was_paused {
             self.pause();
         }
-
-        new_consumer
     }
 
-    pub fn seek_forward(&self, amount: Duration) -> Option<Arc<AudioStreamConsumer>> {
+    pub fn seek_forward(&self, amount: Duration) {
         let new_position = self.position().saturating_add(amount);
-        self.seek_to(new_position)
+        self.seek_to(new_position);
     }
 
-    pub fn seek_backward(&self, amount: Duration) -> Option<Arc<AudioStreamConsumer>> {
+    pub fn seek_backward(&self, amount: Duration) {
         let new_position = self.position().saturating_sub(amount);
-        self.seek_to(new_position)
+        self.seek_to(new_position);
     }
 
     pub fn get_render_image(&self) -> (Option<Arc<RenderImage>>, Option<Arc<RenderImage>>) {
@@ -305,11 +303,13 @@ impl VideoPlayer {
         }
 
         // Advance frame if its PTS has passed
+        // Both times are relative to base_pts for consistent comparison
         if let Some(ref frame) = *next {
             let base = base_pts.unwrap_or(Duration::ZERO);
             let relative_pts = frame.pts.saturating_sub(base);
+            let relative_elapsed = elapsed.saturating_sub(base);
 
-            if elapsed >= relative_pts {
+            if relative_elapsed >= relative_pts {
                 *current = next.take();
                 frame_changed = true;
                 self.frame_generation.fetch_add(1, Ordering::Relaxed);
@@ -321,8 +321,9 @@ impl VideoPlayer {
         if next.is_none() && frame_queue.is_closed() && frame_queue.is_empty() {
             if let Some(ref frame) = *current {
                 let base = base_pts.unwrap_or(Duration::ZERO);
-                let frame_pts = frame.pts.saturating_sub(base);
-                if elapsed > frame_pts {
+                let relative_pts = frame.pts.saturating_sub(base);
+                let relative_elapsed = elapsed.saturating_sub(base);
+                if relative_elapsed > relative_pts {
                     *state = PlaybackState::Ended;
                 }
             } else {
@@ -352,6 +353,8 @@ impl VideoPlayer {
 }
 
 fn frame_to_render_image(frame: &VideoFrame) -> Option<RenderImage> {
+    // Note: Despite the name, RgbaImage just holds raw bytes.
+    // GPUI expects BGRA on macOS, which is what we provide.
     let image = RgbaImage::from_raw(frame.width, frame.height, frame.data.clone())?;
     let img_frame = Frame::new(image);
     Some(RenderImage::new(vec![img_frame]))

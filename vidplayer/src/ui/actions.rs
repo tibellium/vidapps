@@ -55,41 +55,33 @@ pub fn register_shortcuts(app: &mut App) {
     });
 
     app.on_action(|_: &SeekForward, app: &mut App| {
-        let state = app.global_mut::<AppState>();
+        let state = app.global::<AppState>();
         if let Some(ref player) = state.player {
-            if let Some(new_consumer) = player.seek_forward(SEEK_SMALL) {
-                state.audio_consumer = new_consumer;
-            }
+            player.seek_forward(SEEK_SMALL);
             println!("Seeked forward 10s");
         }
     });
 
     app.on_action(|_: &SeekBackward, app: &mut App| {
-        let state = app.global_mut::<AppState>();
+        let state = app.global::<AppState>();
         if let Some(ref player) = state.player {
-            if let Some(new_consumer) = player.seek_backward(SEEK_SMALL) {
-                state.audio_consumer = new_consumer;
-            }
+            player.seek_backward(SEEK_SMALL);
             println!("Seeked backward 10s");
         }
     });
 
     app.on_action(|_: &SeekForwardLarge, app: &mut App| {
-        let state = app.global_mut::<AppState>();
+        let state = app.global::<AppState>();
         if let Some(ref player) = state.player {
-            if let Some(new_consumer) = player.seek_forward(SEEK_LARGE) {
-                state.audio_consumer = new_consumer;
-            }
+            player.seek_forward(SEEK_LARGE);
             println!("Seeked forward 30s");
         }
     });
 
     app.on_action(|_: &SeekBackwardLarge, app: &mut App| {
-        let state = app.global_mut::<AppState>();
+        let state = app.global::<AppState>();
         if let Some(ref player) = state.player {
-            if let Some(new_consumer) = player.seek_backward(SEEK_LARGE) {
-                state.audio_consumer = new_consumer;
-            }
+            player.seek_backward(SEEK_LARGE);
             println!("Seeked backward 30s");
         }
     });

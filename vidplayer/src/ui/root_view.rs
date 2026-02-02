@@ -8,7 +8,6 @@ use gpui::{
     prelude::*, rgb,
 };
 
-use crate::initialize_audio_output;
 use crate::playback::VideoPlayer;
 use crate::window_state::WindowState;
 
@@ -78,6 +77,17 @@ impl RootView {
         }
     }
 
+    pub fn with_player(player: Arc<VideoPlayer>, cx: &mut Context<Self>) -> Self {
+        let player_view = cx.new(|_cx| PlayerView::new(player));
+
+        Self {
+            state: ViewState::Player(player_view),
+            last_size: None,
+            last_origin: None,
+            last_save_time: None,
+        }
+    }
+
     fn on_video_selected(
         &mut self,
         _welcome: Entity<WelcomeView>,
@@ -88,15 +98,17 @@ impl RootView {
     }
 
     fn transition_to_player(&mut self, path: PathBuf, cx: &mut Context<Self>) {
-        // Initialize app state if not already done
-        if !cx.has_global::<AppState>() {
-            cx.set_global(AppState::new());
-            initialize_audio_output(&mut **cx);
-        }
-
         match VideoPlayer::new(&path) {
             Ok(player) => {
                 let player = Arc::new(player);
+
+                // Initialize app state and audio output with the player's consumer
+                if !cx.has_global::<AppState>() {
+                    cx.set_global(AppState::with_player(Arc::clone(&player)));
+                    if let Some(audio_consumer) = player.audio_consumer() {
+                        crate::initialize_audio_output_with_consumer(&mut **cx, audio_consumer);
+                    }
+                }
 
                 // Update window title
                 let window_title = path

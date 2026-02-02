@@ -101,9 +101,26 @@ impl AudioDecoder {
         }
 
         // Send packet to decoder
-        self.decoder
-            .send_packet(&ffmpeg_pkt)
-            .map_err(|e| Error::codec(e.to_string()))?;
+        // EAGAIN means decoder buffer is full - receive frames first then retry
+        match self.decoder.send_packet(&ffmpeg_pkt) {
+            Ok(()) => {}
+            Err(ffmpeg_next::Error::Other { errno }) if errno == ffi::EAGAIN => {
+                // Decoder buffer full - drain frames first
+                let mut all_frames = self.receive_frames()?;
+                // Retry sending packet - if still EAGAIN, just return what we have
+                match self.decoder.send_packet(&ffmpeg_pkt) {
+                    Ok(()) => {
+                        all_frames.extend(self.receive_frames()?);
+                    }
+                    Err(ffmpeg_next::Error::Other { errno }) if errno == ffi::EAGAIN => {
+                        // Still can't send - just return the frames we drained
+                    }
+                    Err(e) => return Err(Error::codec(e.to_string())),
+                }
+                return Ok(all_frames);
+            }
+            Err(e) => return Err(Error::codec(e.to_string())),
+        }
 
         // Receive all available frames
         self.receive_frames()
@@ -115,11 +132,26 @@ impl AudioDecoder {
         Call this at end of stream to retrieve any buffered frames.
     */
     pub fn flush(&mut self) -> Result<Vec<AudioFrame>> {
-        self.decoder
-            .send_eof()
-            .map_err(|e| Error::codec(e.to_string()))?;
+        // First drain any pending frames
+        let mut all_frames = self.receive_frames()?;
 
-        self.receive_frames()
+        // Send EOF - EAGAIN here means we need to drain more frames first
+        match self.decoder.send_eof() {
+            Ok(()) => {}
+            Err(ffmpeg_next::Error::Other { errno }) if errno == ffi::EAGAIN => {
+                // Drain frames and retry
+                all_frames.extend(self.receive_frames()?);
+                let _ = self.decoder.send_eof(); // Ignore error on retry
+            }
+            Err(ffmpeg_next::Error::Eof) => {
+                // Already at EOF, that's fine
+            }
+            Err(e) => return Err(Error::codec(e.to_string())),
+        }
+
+        // Receive remaining frames after EOF
+        all_frames.extend(self.receive_frames()?);
+        Ok(all_frames)
     }
 
     /**
@@ -146,7 +178,7 @@ impl AudioDecoder {
                         eprintln!("[audio_decode] frame conversion error: {}", e);
                     }
                 },
-                Err(ffmpeg_next::Error::Other { errno }) if errno == ffi::AVERROR(ffi::EAGAIN) => {
+                Err(ffmpeg_next::Error::Other { errno }) if errno == ffi::EAGAIN => {
                     break;
                 }
                 Err(ffmpeg_next::Error::Eof) => {
@@ -173,17 +205,21 @@ impl AudioDecoder {
             return Err(Error::invalid_data("audio frame has zero samples"));
         }
 
+        // Check that the frame actually has data planes allocated
+        if frame.planes() == 0 {
+            return Err(Error::invalid_data(
+                "audio frame has no data planes (linesize is 0)",
+            ));
+        }
+
         // Get format
         let ffmpeg_format = frame.format();
         let format = sample_format_from_ffmpeg(ffmpeg_format).ok_or_else(|| {
             Error::unsupported_format(format!("unsupported sample format: {:?}", ffmpeg_format))
         })?;
 
-        // Determine channel layout
-        let channels = match channel_count {
-            1 => ChannelLayout::Mono,
-            _ => ChannelLayout::Stereo,
-        };
+        // Determine channel layout from actual channel count
+        let channels = ChannelLayout::from_count(channel_count);
 
         // Get PTS
         let pts = frame.pts().map(Pts);
@@ -205,6 +241,13 @@ impl AudioDecoder {
 
 /**
     Copy audio data from FFmpeg frame.
+
+    Handles both planar and packed formats. For planar audio, FFmpeg stores
+    each channel in a separate plane, and we need to interleave them.
+
+    Note: In FFmpeg planar audio, linesize[0] contains the size of EACH plane
+    (they're all the same), while linesize[1..] may be 0. We access plane data
+    directly via the data pointers rather than relying on linesize for each plane.
 */
 fn copy_audio_data(
     frame: &AudioFrameFFmpeg,
@@ -213,15 +256,39 @@ fn copy_audio_data(
     channels: u16,
 ) -> Result<Vec<u8>> {
     let bytes_per_sample = format.bytes_per_sample();
-    let is_planar = frame.is_planar();
+    let total_bytes = samples * channels as usize * bytes_per_sample;
+    let expected_plane_bytes = samples * bytes_per_sample;
 
-    if is_planar {
+    // For planar audio, check if we have the right number of planes
+    let is_planar = frame.is_planar();
+    let planes = frame.planes();
+
+    if is_planar && planes >= channels as usize {
         // Planar format - interleave the channels
-        let total_bytes = samples * channels as usize * bytes_per_sample;
+        // In planar format, each channel is in its own plane
         let mut output = vec![0u8; total_bytes];
 
+        // Get linesize[0] which applies to all planes in planar audio
+        let plane0_data = frame.data(0);
+        let plane_size = plane0_data.len();
+
+        if plane_size < expected_plane_bytes {
+            return Err(Error::invalid_data(format!(
+                "audio plane size {} is less than expected {} bytes for {} samples",
+                plane_size, expected_plane_bytes, samples
+            )));
+        }
+
         for ch in 0..channels as usize {
-            let plane_data = frame.data(ch);
+            // Access each plane's data directly
+            // Note: We use unsafe here because frame.data(ch) for ch > 0 may
+            // return based on linesize[ch] which could be 0 for planar audio.
+            // Instead, we know all planes have the same size as plane 0.
+            let plane_data = unsafe {
+                let ptr = (*frame.as_ptr()).data[ch];
+                std::slice::from_raw_parts(ptr, plane_size)
+            };
+
             for s in 0..samples {
                 let src_offset = s * bytes_per_sample;
                 let dst_offset = (s * channels as usize + ch) * bytes_per_sample;
@@ -232,10 +299,16 @@ fn copy_audio_data(
 
         Ok(output)
     } else {
-        // Packed/interleaved format - just copy
-        let plane_data = frame.data(0);
-        let total_bytes = samples * channels as usize * bytes_per_sample;
-        Ok(plane_data[..total_bytes].to_vec())
+        // Packed/interleaved format - all data in plane 0
+        let plane0_data = frame.data(0);
+        if plane0_data.len() < total_bytes {
+            return Err(Error::invalid_data(format!(
+                "packed audio data has {} bytes, expected at least {}",
+                plane0_data.len(),
+                total_bytes
+            )));
+        }
+        Ok(plane0_data[..total_bytes].to_vec())
     }
 }
 

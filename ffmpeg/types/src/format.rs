@@ -29,6 +29,8 @@ pub enum PixelFormat {
     Yuv444p,
     /// Planar YUV 4:2:0, 10-bit (HDR content)
     Yuv420p10,
+    /// Semi-planar YUV 4:2:0, 10-bit little-endian (HDR hardware decoder output)
+    P010le,
 }
 
 impl PixelFormat {
@@ -40,7 +42,7 @@ impl PixelFormat {
     pub const fn bits_per_pixel(self) -> u32 {
         match self {
             Self::Yuv420p | Self::Nv12 => 12,
-            Self::Yuv420p10 => 15, // 10 bits * 1.5 planes average
+            Self::Yuv420p10 | Self::P010le => 15, // 10 bits * 1.5 planes average
             Self::Yuv422p => 16,
             Self::Rgb24 | Self::Bgr24 | Self::Yuv444p => 24,
             Self::Bgra | Self::Rgba => 32,
@@ -53,7 +55,7 @@ impl PixelFormat {
     pub const fn is_planar(self) -> bool {
         match self {
             Self::Yuv420p | Self::Yuv422p | Self::Yuv444p | Self::Yuv420p10 => true,
-            Self::Nv12 => true, // semi-planar counts as planar
+            Self::Nv12 | Self::P010le => true, // semi-planar counts as planar
             Self::Bgra | Self::Rgba | Self::Rgb24 | Self::Bgr24 => false,
         }
     }
@@ -108,6 +110,10 @@ pub enum ChannelLayout {
     Mono,
     /// Left and right channels
     Stereo,
+    /// 5.1 surround (FL, FR, FC, LFE, BL, BR)
+    Surround5_1,
+    /// 7.1 surround (FL, FR, FC, LFE, BL, BR, SL, SR)
+    Surround7_1,
 }
 
 impl ChannelLayout {
@@ -118,6 +124,25 @@ impl ChannelLayout {
         match self {
             Self::Mono => 1,
             Self::Stereo => 2,
+            Self::Surround5_1 => 6,
+            Self::Surround7_1 => 8,
+        }
+    }
+
+    /**
+        Create a channel layout from a channel count.
+
+        Falls back to the closest matching layout.
+    */
+    pub const fn from_count(count: u16) -> Self {
+        match count {
+            1 => Self::Mono,
+            2 => Self::Stereo,
+            6 => Self::Surround5_1,
+            8 => Self::Surround7_1,
+            // For other counts, use closest match
+            3..=5 => Self::Surround5_1,
+            _ => Self::Surround7_1,
         }
     }
 }

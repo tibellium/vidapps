@@ -66,6 +66,10 @@ impl AudioStreamProducer {
         self.closed.store(true, Ordering::Release);
     }
 
+    pub fn reopen(&self) {
+        self.closed.store(false, Ordering::Release);
+    }
+
     pub fn is_closed(&self) -> bool {
         self.closed.load(Ordering::Acquire)
     }

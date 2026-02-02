@@ -30,6 +30,19 @@ impl AppState {
         }
     }
 
+    pub fn with_player(player: Arc<VideoPlayer>) -> Self {
+        let audio_consumer = player
+            .audio_consumer()
+            .unwrap_or_else(|| AudioStream::new().consumer);
+
+        Self {
+            player: Some(player),
+            audio_consumer,
+            volume: 1.0,
+            muted: false,
+        }
+    }
+
     pub fn set_player(&mut self, player: Arc<VideoPlayer>) {
         // Update audio consumer if player has audio
         if let Some(consumer) = player.audio_consumer() {

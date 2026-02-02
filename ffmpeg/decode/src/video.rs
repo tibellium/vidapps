@@ -118,9 +118,26 @@ impl VideoDecoder {
         }
 
         // Send packet to decoder
-        self.decoder
-            .send_packet(&ffmpeg_pkt)
-            .map_err(|e| Error::codec(e.to_string()))?;
+        // EAGAIN means decoder buffer is full - receive frames first then retry
+        match self.decoder.send_packet(&ffmpeg_pkt) {
+            Ok(()) => {}
+            Err(ffmpeg_next::Error::Other { errno }) if errno == ffi::EAGAIN => {
+                // Decoder buffer full - drain frames first
+                let mut all_frames = self.receive_frames()?;
+                // Retry sending packet - if still EAGAIN, just return what we have
+                match self.decoder.send_packet(&ffmpeg_pkt) {
+                    Ok(()) => {
+                        all_frames.extend(self.receive_frames()?);
+                    }
+                    Err(ffmpeg_next::Error::Other { errno }) if errno == ffi::EAGAIN => {
+                        // Still can't send - just return the frames we drained
+                    }
+                    Err(e) => return Err(Error::codec(e.to_string())),
+                }
+                return Ok(all_frames);
+            }
+            Err(e) => return Err(Error::codec(e.to_string())),
+        }
 
         // Receive all available frames
         self.receive_frames()
@@ -132,11 +149,26 @@ impl VideoDecoder {
         Call this at end of stream to retrieve frames the decoder has buffered.
     */
     pub fn flush(&mut self) -> Result<Vec<VideoFrame>> {
-        self.decoder
-            .send_eof()
-            .map_err(|e| Error::codec(e.to_string()))?;
+        // First drain any pending frames
+        let mut all_frames = self.receive_frames()?;
 
-        self.receive_frames()
+        // Send EOF - EAGAIN here means we need to drain more frames first
+        match self.decoder.send_eof() {
+            Ok(()) => {}
+            Err(ffmpeg_next::Error::Other { errno }) if errno == ffi::EAGAIN => {
+                // Drain frames and retry
+                all_frames.extend(self.receive_frames()?);
+                let _ = self.decoder.send_eof(); // Ignore error on retry
+            }
+            Err(ffmpeg_next::Error::Eof) => {
+                // Already at EOF, that's fine
+            }
+            Err(e) => return Err(Error::codec(e.to_string())),
+        }
+
+        // Receive remaining frames after EOF
+        all_frames.extend(self.receive_frames()?);
+        Ok(all_frames)
     }
 
     /**
@@ -168,7 +200,7 @@ impl VideoDecoder {
                         }
                     }
                 }
-                Err(ffmpeg_next::Error::Other { errno }) if errno == ffi::AVERROR(ffi::EAGAIN) => {
+                Err(ffmpeg_next::Error::Other { errno }) if errno == ffi::EAGAIN => {
                     // Need more input
                     break;
                 }
@@ -177,7 +209,12 @@ impl VideoDecoder {
                     break;
                 }
                 Err(e) => {
-                    return Err(Error::codec(e.to_string()));
+                    // Only return error if we haven't collected any frames yet
+                    // Otherwise just break and return what we have
+                    if frames.is_empty() {
+                        return Err(Error::codec(e.to_string()));
+                    }
+                    break;
                 }
             }
         }
@@ -332,7 +369,7 @@ fn copy_frame_data(frame: &VideoFrameFFmpeg, format: PixelFormat) -> Result<Vec<
             Ok(output)
         }
 
-        // NV12 - semi-planar
+        // NV12 - semi-planar 8-bit
         PixelFormat::Nv12 => {
             let width = frame.width() as usize;
             let height = frame.height() as usize;
@@ -356,6 +393,37 @@ fn copy_frame_data(frame: &VideoFrameFFmpeg, format: PixelFormat) -> Result<Vec<
             for y in 0..(height / 2) {
                 let row_start = y * uv_stride;
                 let row_end = row_start + width;
+                output.extend_from_slice(&uv_data[row_start..row_end]);
+            }
+
+            Ok(output)
+        }
+
+        // P010 - semi-planar 10-bit (stored in 16-bit, 2 bytes per sample)
+        PixelFormat::P010le => {
+            let width = frame.width() as usize;
+            let height = frame.height() as usize;
+            let bytes_per_sample = 2; // 16-bit storage for 10-bit data
+            let y_size = width * height * bytes_per_sample;
+            let uv_size = width * (height / 2) * bytes_per_sample;
+
+            let mut output = Vec::with_capacity(y_size + uv_size);
+
+            // Copy Y plane (16-bit per sample)
+            let y_stride = frame.stride(0);
+            let y_data = frame.data(0);
+            for y in 0..height {
+                let row_start = y * y_stride;
+                let row_end = row_start + width * bytes_per_sample;
+                output.extend_from_slice(&y_data[row_start..row_end]);
+            }
+
+            // Copy UV plane (interleaved, 16-bit per component)
+            let uv_stride = frame.stride(1);
+            let uv_data = frame.data(1);
+            for y in 0..(height / 2) {
+                let row_start = y * uv_stride;
+                let row_end = row_start + width * bytes_per_sample;
                 output.extend_from_slice(&uv_data[row_start..row_end]);
             }
 
@@ -386,6 +454,7 @@ fn pixel_format_from_ffmpeg(format: ffmpeg_next::format::Pixel) -> Option<PixelF
         Pixel::YUV422P => Some(PixelFormat::Yuv422p),
         Pixel::YUV444P => Some(PixelFormat::Yuv444p),
         Pixel::YUV420P10LE | Pixel::YUV420P10BE => Some(PixelFormat::Yuv420p10),
+        Pixel::P010LE | Pixel::P010BE => Some(PixelFormat::P010le),
         _ => None,
     }
 }

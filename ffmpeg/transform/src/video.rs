@@ -250,6 +250,7 @@ fn pixel_format_to_ffmpeg(format: PixelFormat) -> Result<ffmpeg_next::format::Pi
         PixelFormat::Yuv422p => Ok(Pixel::YUV422P),
         PixelFormat::Yuv444p => Ok(Pixel::YUV444P),
         PixelFormat::Yuv420p10 => Ok(Pixel::YUV420P10LE),
+        PixelFormat::P010le => Ok(Pixel::P010LE),
         _ => Err(Error::unsupported_format(format!(
             "pixel format {:?} not supported",
             format
@@ -353,7 +354,7 @@ fn copy_data_to_ffmpeg_frame(dst: &mut VideoFrameFFmpeg, src: &VideoFrame) -> Re
             Ok(())
         }
 
-        // NV12 - semi-planar
+        // NV12 - semi-planar 8-bit
         PixelFormat::Nv12 => {
             let width = src.width as usize;
             let height = src.height as usize;
@@ -378,6 +379,39 @@ fn copy_data_to_ffmpeg_frame(dst: &mut VideoFrameFFmpeg, src: &VideoFrame) -> Re
                 let dst_start = y * uv_stride;
                 uv_data[dst_start..dst_start + width]
                     .copy_from_slice(&src.data[src_start..src_start + width]);
+            }
+
+            Ok(())
+        }
+
+        // P010 - semi-planar 10-bit (16-bit storage)
+        PixelFormat::P010le => {
+            let width = src.width as usize;
+            let height = src.height as usize;
+            let bytes_per_sample = 2;
+            let y_size = width * height * bytes_per_sample;
+
+            // Copy Y plane
+            let y_stride = dst.stride(0);
+            let y_data = dst.data_mut(0);
+            for y in 0..height {
+                let src_start = y * width * bytes_per_sample;
+                let dst_start = y * y_stride;
+                let row_bytes = width * bytes_per_sample;
+                y_data[dst_start..dst_start + row_bytes]
+                    .copy_from_slice(&src.data[src_start..src_start + row_bytes]);
+            }
+
+            // Copy UV plane
+            let uv_stride = dst.stride(1);
+            let uv_data = dst.data_mut(1);
+            let uv_height = height / 2;
+            for y in 0..uv_height {
+                let src_start = y_size + y * width * bytes_per_sample;
+                let dst_start = y * uv_stride;
+                let row_bytes = width * bytes_per_sample;
+                uv_data[dst_start..dst_start + row_bytes]
+                    .copy_from_slice(&src.data[src_start..src_start + row_bytes]);
             }
 
             Ok(())

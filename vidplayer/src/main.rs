@@ -87,6 +87,9 @@ fn open_app_with_welcome(cx: &mut App) {
 }
 
 fn open_app_with_video(path: PathBuf, cx: &mut App) {
+    use crate::playback::VideoPlayer;
+    use std::sync::Arc;
+
     let window_title = path
         .file_name()
         .map(|s| format!("Video Player - {}", s.to_string_lossy()))
@@ -105,29 +108,25 @@ fn open_app_with_video(path: PathBuf, cx: &mut App) {
         (bounds, None)
     };
 
-    // Initialize app state (will be populated when player is created)
-    cx.set_global(AppState::new());
-
-    // Initialize audio output
-    let app_state = cx.global::<AppState>();
-    let audio_consumer = app_state.audio_consumer.clone();
-    let audio_output = match AudioOutput::new(audio_consumer) {
-        Ok(output) => {
-            eprintln!(
-                "Audio output initialized ({}Hz, {} channels)",
-                DEFAULT_SAMPLE_RATE, DEFAULT_CHANNELS
-            );
-            Some(Box::new(output))
-        }
+    // Create the player FIRST so we can get its audio consumer
+    let player = match VideoPlayer::new(&path) {
+        Ok(p) => Arc::new(p),
         Err(e) => {
-            eprintln!("Warning: Failed to initialize audio output: {}", e);
-            eprintln!("Video will play without audio");
-            None
+            eprintln!("Failed to open video: {}", e);
+            open_app_with_welcome(cx);
+            return;
         }
     };
-    if let Some(output) = audio_output {
-        Box::leak(output);
+
+    // Initialize audio output with the player's ACTUAL consumer
+    if let Some(audio_consumer) = player.audio_consumer() {
+        if let Ok(output) = AudioOutput::new(audio_consumer) {
+            Box::leak(Box::new(output));
+        }
     }
+
+    // Initialize app state with the player
+    cx.set_global(AppState::with_player(Arc::clone(&player)));
 
     println!("\nKeyboard shortcuts:");
     println!("  Space      - Pause/Resume");
@@ -154,7 +153,7 @@ fn open_app_with_video(path: PathBuf, cx: &mut App) {
                 }),
                 ..Default::default()
             },
-            |_window, cx| cx.new(|cx| RootView::new_with_video(path, cx)),
+            |_window, cx| cx.new(|cx| RootView::with_player(player, cx)),
         )
         .expect("Failed to open window");
 
@@ -162,24 +161,11 @@ fn open_app_with_video(path: PathBuf, cx: &mut App) {
     cx.activate(true);
 }
 
-pub fn initialize_audio_output(cx: &mut App) {
-    let app_state = cx.global::<AppState>();
-    let audio_consumer = app_state.audio_consumer.clone();
-
-    let audio_output = match AudioOutput::new(audio_consumer) {
-        Ok(output) => {
-            eprintln!(
-                "Audio output initialized ({}Hz, {} channels)",
-                DEFAULT_SAMPLE_RATE, DEFAULT_CHANNELS
-            );
-            Some(Box::new(output))
-        }
-        Err(e) => {
-            eprintln!("Warning: Failed to initialize audio output: {}", e);
-            None
-        }
-    };
-    if let Some(output) = audio_output {
-        Box::leak(output);
+pub fn initialize_audio_output_with_consumer(
+    _cx: &mut App,
+    audio_consumer: std::sync::Arc<crate::audio::AudioStreamConsumer>,
+) {
+    if let Ok(output) = AudioOutput::new(audio_consumer) {
+        Box::leak(Box::new(output));
     }
 }
