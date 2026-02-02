@@ -1,0 +1,28 @@
+[package]
+name = "vidproxy"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "vidproxy"
+path = "src/main.rs"
+
+[dependencies]
+# FFmpeg crates
+ffmpeg-types = { path = "../ffmpeg/types" }
+ffmpeg-source = { path = "../ffmpeg/source" }
+ffmpeg-sink = { path = "../ffmpeg/sink" }
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "signal", "sync"] }
+
+# HTTP server
+axum = "0.8"
+tower-http = { version = "0.6", features = ["fs"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Temp directory
+tempfile = "3"
