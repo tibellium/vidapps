@@ -45,10 +45,22 @@ pub fn run_remux_pipeline(
         media_info.video.as_ref().map(|v| v.height).unwrap_or(0),
         media_info.video.as_ref().map(|v| v.codec_id),
     );
+    if let Some(ref video) = media_info.video {
+        println!(
+            "Video time_base: {}/{}",
+            video.time_base.num, video.time_base.den
+        );
+    }
+    if let Some(ref audio) = media_info.audio {
+        println!(
+            "Audio time_base: {}/{}",
+            audio.time_base.num, audio.time_base.den
+        );
+    }
 
     // Configure HLS sink
     let playlist_path = output_dir.join("playlist.m3u8");
-    let mut sink_config = SinkConfig::hls(segment_duration);
+    let mut sink_config = SinkConfig::hls(segment_duration).rebase_timestamps();
 
     if let Some(video_info) = media_info.video.clone() {
         sink_config = sink_config.with_video(video_info);
@@ -58,6 +70,7 @@ pub fn run_remux_pipeline(
     }
 
     let mut sink = Sink::file(&playlist_path, sink_config)?;
+    println!("Sink created: {:?}", sink);
 
     println!("Writing HLS to: {}", output_dir.display());
 
