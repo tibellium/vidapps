@@ -1,8 +1,12 @@
 /target
+/temp
+
 /.env
 /docker-compose.yml
+
 /.DS_Store
 /**/.DS_Store
+
 /*.mpd
 /*.bin
 /*.txt

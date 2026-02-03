@@ -26,7 +26,7 @@ struct Args {
     headers: Vec<String>,
 
     /// Number of segments to keep
-    #[arg(short = 'n', long, default_value = "10")]
+    #[arg(short = 'n', long, default_value = "32")]
     segment_count: usize,
 
     /// Segment duration in seconds
