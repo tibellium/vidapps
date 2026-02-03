@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::extract::State;
-use axum::http::header;
+use axum::http::{HeaderMap, header};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use tokio::sync::watch;
@@ -14,14 +14,18 @@ use crate::segments::SegmentManager;
 #[derive(Clone)]
 struct AppState {
     channel_name: String,
-    port: u16,
 }
 
-async fn channels_m3u(State(state): State<AppState>) -> impl IntoResponse {
+async fn channels_m3u(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    let host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost:8080");
+
     let playlist = format!(
-        "#EXTM3U\n#EXTINF:-1 tvg-name=\"{name}\",{name}\nhttp://localhost:{port}/playlist.m3u8\n",
+        "#EXTM3U\n#EXTINF:-1 tvg-name=\"{name}\",{name}\nhttp://{host}/playlist.m3u8\n",
         name = state.channel_name,
-        port = state.port,
+        host = host,
     );
 
     ([(header::CONTENT_TYPE, "audio/x-mpegurl")], playlist)
@@ -41,7 +45,6 @@ pub async fn run_server(
 
     let state = AppState {
         channel_name: channel_name.to_string(),
-        port: addr.port(),
     };
 
     let app = Router::new()
