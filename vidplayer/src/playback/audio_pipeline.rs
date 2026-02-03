@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -40,14 +40,17 @@ impl AudioPipeline {
 
     fn new_at(path: PathBuf, start_position: Option<Duration>) -> Option<Self> {
         // Check if file has audio
-        let source = Source::open(
-            &path,
-            SourceConfig {
-                stream_filter: Some(StreamFilter::AudioOnly),
-                ..Default::default()
-            },
-        )
-        .ok()?;
+        let path_str = path.to_str()?;
+        let rt = tokio::runtime::Runtime::new().ok()?;
+        let source = rt
+            .block_on(Source::open(
+                path_str,
+                SourceConfig {
+                    stream_filter: Some(StreamFilter::AudioOnly),
+                    ..Default::default()
+                },
+            ))
+            .ok()?;
 
         if !source.has_audio() {
             return None;
@@ -205,18 +208,23 @@ impl Drop for AudioPipeline {
 }
 
 fn audio_demux(
-    path: &PathBuf,
+    path: &Path,
     packets: Arc<PacketQueue>,
     stop_flag: Arc<AtomicBool>,
     start_position: Option<Duration>,
 ) -> Result<(), ffmpeg_types::Error> {
-    let mut source = Source::open(
-        path,
+    let path_str = path
+        .to_str()
+        .ok_or_else(|| ffmpeg_types::Error::codec("Invalid path"))?;
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e: std::io::Error| ffmpeg_types::Error::codec(e.to_string()))?;
+    let mut source = rt.block_on(Source::open(
+        path_str,
         SourceConfig {
             stream_filter: Some(StreamFilter::AudioOnly),
             ..Default::default()
         },
-    )?;
+    ))?;
 
     if let Some(pos) = start_position {
         // seek() returns the actual position, but for audio we don't need
@@ -230,10 +238,8 @@ fn audio_demux(
         }
 
         let packet = result?;
-        if packet.stream_type == StreamType::Audio {
-            if !packets.push(packet) {
-                break;
-            }
+        if packet.stream_type == StreamType::Audio && !packets.push(packet) {
+            break;
         }
     }
 
@@ -242,19 +248,24 @@ fn audio_demux(
 }
 
 fn decode_audio_packets(
-    path: &PathBuf,
+    path: &Path,
     packets: Arc<PacketQueue>,
     producer: &AudioStreamProducer,
     stop_flag: Arc<AtomicBool>,
 ) -> Result<(), ffmpeg_types::Error> {
     // Open source to get codec config
-    let mut source = Source::open(
-        path,
+    let path_str = path
+        .to_str()
+        .ok_or_else(|| ffmpeg_types::Error::codec("Invalid path"))?;
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e: std::io::Error| ffmpeg_types::Error::codec(e.to_string()))?;
+    let mut source = rt.block_on(Source::open(
+        path_str,
         SourceConfig {
             stream_filter: Some(StreamFilter::AudioOnly),
             ..Default::default()
         },
-    )?;
+    ))?;
 
     let codec_config = source
         .take_audio_codec_config()

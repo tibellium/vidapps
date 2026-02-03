@@ -3,7 +3,7 @@ use std::sync::{
     Arc, Mutex,
     atomic::{AtomicU64, Ordering},
 };
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use gpui::RenderImage;
 use image::{Frame, RgbaImage};
@@ -85,7 +85,12 @@ impl VideoPlayer {
         let path = path.as_ref().to_path_buf();
 
         // Probe for duration
-        let info = ffmpeg_source::probe(&path)?;
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| ffmpeg_types::Error::codec("Invalid path"))?;
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e: std::io::Error| ffmpeg_types::Error::codec(e.to_string()))?;
+        let info = rt.block_on(ffmpeg_source::probe(path_str))?;
         let duration = info.duration.unwrap_or(Duration::ZERO);
 
         // Create audio pipeline (if file has audio)
@@ -304,10 +309,10 @@ impl VideoPlayer {
         }
 
         // Initialize base_pts from first frame
-        if base_pts.is_none() {
-            if let Some(ref frame) = *next {
-                *base_pts = Some(frame.pts);
-            }
+        if base_pts.is_none()
+            && let Some(ref frame) = *next
+        {
+            *base_pts = Some(frame.pts);
         }
 
         // Advance frame if its PTS has passed
@@ -340,13 +345,12 @@ impl VideoPlayer {
         }
 
         // Create new RenderImage if frame changed
-        if frame_changed || cached.is_none() {
-            if let Some(ref frame) = *current {
-                if let Some(render_image) = frame_to_render_image(frame) {
-                    old_image = cached.take();
-                    *cached = Some(Arc::new(render_image));
-                }
-            }
+        if (frame_changed || cached.is_none())
+            && let Some(ref frame) = *current
+            && let Some(render_image) = frame_to_render_image(frame)
+        {
+            old_image = cached.take();
+            *cached = Some(Arc::new(render_image));
         }
 
         (cached.clone(), old_image)

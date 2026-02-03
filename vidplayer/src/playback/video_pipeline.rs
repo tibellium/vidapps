@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -45,7 +45,12 @@ impl VideoPipeline {
         start_position: Option<Duration>,
     ) -> Result<Self, ffmpeg_types::Error> {
         // Probe to get video dimensions
-        let info = ffmpeg_source::probe(&path)?;
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| ffmpeg_types::Error::codec("Invalid path"))?;
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e: std::io::Error| ffmpeg_types::Error::codec(e.to_string()))?;
+        let info = rt.block_on(ffmpeg_source::probe(path_str))?;
         let video_info = info
             .video
             .ok_or_else(|| ffmpeg_types::Error::codec("No video stream"))?;
@@ -200,19 +205,24 @@ impl Drop for VideoPipeline {
 }
 
 fn video_demux(
-    path: &PathBuf,
+    path: &Path,
     packets: Arc<PacketQueue>,
     stop_flag: Arc<AtomicBool>,
     start_position: Option<Duration>,
     position_tx: Option<mpsc::Sender<Duration>>,
 ) -> Result<(), ffmpeg_types::Error> {
-    let mut source = Source::open(
-        path,
+    let path_str = path
+        .to_str()
+        .ok_or_else(|| ffmpeg_types::Error::codec("Invalid path"))?;
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e: std::io::Error| ffmpeg_types::Error::codec(e.to_string()))?;
+    let mut source = rt.block_on(Source::open(
+        path_str,
         SourceConfig {
             stream_filter: Some(StreamFilter::VideoOnly),
             ..Default::default()
         },
-    )?;
+    ))?;
 
     if let Some(pos) = start_position {
         let actual_position = source.seek(pos)?;
@@ -228,10 +238,8 @@ fn video_demux(
         }
 
         let packet = result?;
-        if packet.stream_type == StreamType::Video {
-            if !packets.push(packet) {
-                break;
-            }
+        if packet.stream_type == StreamType::Video && !packets.push(packet) {
+            break;
         }
     }
 
@@ -240,19 +248,24 @@ fn video_demux(
 }
 
 fn decode_video_packets(
-    path: &PathBuf,
+    path: &Path,
     packets: Arc<PacketQueue>,
     frames: Arc<FrameQueue>,
     stop_flag: Arc<AtomicBool>,
 ) -> Result<(), ffmpeg_types::Error> {
     // Open source to get codec config
-    let mut source = Source::open(
-        path,
+    let path_str = path
+        .to_str()
+        .ok_or_else(|| ffmpeg_types::Error::codec("Invalid path"))?;
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e: std::io::Error| ffmpeg_types::Error::codec(e.to_string()))?;
+    let mut source = rt.block_on(Source::open(
+        path_str,
         SourceConfig {
             stream_filter: Some(StreamFilter::VideoOnly),
             ..Default::default()
         },
-    )?;
+    ))?;
 
     let codec_config = source
         .take_video_codec_config()

@@ -5,38 +5,43 @@ use std::time::Duration;
 use tokio::sync::watch;
 
 use ffmpeg_sink::{Sink, SinkConfig};
-use ffmpeg_source::{NetworkOptions, Source, SourceConfig};
+use ffmpeg_source::{Source, SourceConfig};
 
 use crate::segments::SegmentManager;
 
 /**
     Run the remux pipeline: read from source HLS/DASH, write to local HLS.
+
+    Note: Custom headers are no longer supported by the ffmpeg-source API.
+
+    The `headers` parameter is kept for API compatibility but is currently ignored.
 */
-pub fn run_remux_pipeline(
+pub async fn run_remux_pipeline(
     input_url: &str,
-    headers: &[(String, String)],
+    #[allow(unused_variables)] headers: &[(String, String)],
     decryption_key: Option<&str>,
     output_dir: &Path,
     segment_duration: Duration,
     segment_manager: Arc<SegmentManager>,
     mut shutdown_rx: watch::Receiver<bool>,
 ) -> Result<(), ffmpeg_types::Error> {
-    // Build network options with custom headers
-    let mut network_opts = NetworkOptions::default();
-    for (key, value) in headers {
-        network_opts = network_opts.header(key, value);
-    }
-    network_opts = network_opts.reconnect();
-
-    // Add CENC decryption key if provided
+    // Build source config with decryption key if provided
+    let mut source_config = SourceConfig::default();
     if let Some(key) = decryption_key {
-        network_opts = network_opts.cenc_decryption_key(key);
-        println!("Using CENC decryption key: {}...", &key[..8.min(key.len())]);
+        // The new API requires separate key_id and key values in "key_id:key" format
+        if let Some((key_id, key_value)) = key.split_once(':') {
+            source_config = source_config.with_decryption_key(key_id, key_value);
+            println!(
+                "Using CENC decryption key_id: {}...",
+                &key_id[..8.min(key_id.len())]
+            );
+        } else {
+            eprintln!("Warning: decryption key must be in 'key_id:key' format, ignoring");
+        }
     }
 
-    // Open source
-    let source_config = SourceConfig::default().with_network_options(network_opts);
-    let mut source = Source::open(input_url, source_config)?;
+    // Open source (now async)
+    let mut source = Source::open(input_url, source_config).await?;
 
     let media_info = source.media_info();
     println!(

@@ -73,7 +73,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let decryption_key = args.decryption_key.clone();
 
     let proxy_handle = tokio::task::spawn_blocking(move || {
-        proxy::run_remux_pipeline(
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(proxy::run_remux_pipeline(
             &input_url,
             &headers,
             decryption_key.as_deref(),
@@ -81,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             segment_duration,
             proxy_segment_manager,
             proxy_shutdown_rx,
-        )
+        ))
     });
 
     // Start HTTP server

@@ -838,6 +838,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5dd9dc738b7a8311c7ade152424974d8115f2cdad61e8dab8dac9f2362298510"
 
 [[package]]
+name = "bytecount"
+version = "0.6.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "175812e0be2bccb6abe50bb8d566126198344f707e304f45c648fd8f2cc0365e"
+
+[[package]]
 name = "bytemuck"
 version = "1.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1568,6 +1574,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2931af7e13dc045d8e9d26afccc6fa115d64e115c9c84b1166288b46f6782c2"
 
 [[package]]
+name = "ctr"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0369ee1ad671834580515889b80f2ea915f23b8be8d0daa4bbaf2ac5c7590835"
+dependencies = [
+ "cipher",
+]
+
+[[package]]
 name = "darling"
 version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2013,7 +2028,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-decode"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=a1a2d0630e28b3d2d8488afc736bbb5c88e08267#a1a2d0630e28b3d2d8488afc736bbb5c88e08267"
+source = "git+https://github.com/tibellium/crates?rev=6d4342096b01ebe7e1906b9509740c2222fab811#6d4342096b01ebe7e1906b9509740c2222fab811"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-source",
@@ -2034,7 +2049,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-sink"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=a1a2d0630e28b3d2d8488afc736bbb5c88e08267#a1a2d0630e28b3d2d8488afc736bbb5c88e08267"
+source = "git+https://github.com/tibellium/crates?rev=6d4342096b01ebe7e1906b9509740c2222fab811#6d4342096b01ebe7e1906b9509740c2222fab811"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-types",
@@ -2043,10 +2058,20 @@ dependencies = [
 [[package]]
 name = "ffmpeg-source"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=a1a2d0630e28b3d2d8488afc736bbb5c88e08267#a1a2d0630e28b3d2d8488afc736bbb5c88e08267"
+source = "git+https://github.com/tibellium/crates?rev=6d4342096b01ebe7e1906b9509740c2222fab811#6d4342096b01ebe7e1906b9509740c2222fab811"
 dependencies = [
+ "aes",
+ "bytecount",
+ "ctr",
  "ffmpeg-next",
  "ffmpeg-types",
+ "libc",
+ "mp4-atom",
+ "quick-xml 0.37.5",
+ "reqwest 0.12.28",
+ "serde",
+ "tokio",
+ "url",
 ]
 
 [[package]]
@@ -2066,7 +2091,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-transform"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=a1a2d0630e28b3d2d8488afc736bbb5c88e08267#a1a2d0630e28b3d2d8488afc736bbb5c88e08267"
+source = "git+https://github.com/tibellium/crates?rev=6d4342096b01ebe7e1906b9509740c2222fab811#6d4342096b01ebe7e1906b9509740c2222fab811"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-types",
@@ -2075,7 +2100,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-types"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=a1a2d0630e28b3d2d8488afc736bbb5c88e08267#a1a2d0630e28b3d2d8488afc736bbb5c88e08267"
+source = "git+https://github.com/tibellium/crates?rev=6d4342096b01ebe7e1906b9509740c2222fab811#6d4342096b01ebe7e1906b9509740c2222fab811"
 dependencies = [
  "static_assertions",
 ]
@@ -3769,6 +3794,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mp4-atom"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e6ca41187fd83535ec10045e7bd4e6ee508b5eb0488c3bce66bca9182d26a96"
+dependencies = [
+ "num",
+ "paste",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
 name = "naga"
 version = "25.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4688,6 +4725,16 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
+version = "0.37.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "331e97a1af0bf59823e6eadffe373d7b27f485be8748f71471c662c1f269b7fb"
+dependencies = [
+ "memchr",
+ "serde",
+]
+
+[[package]]
+name = "quick-xml"
 version = "0.38.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b66c2058c55a409d601666cffe35f04333cf1013010882cec174a7467cd4e21c"
@@ -5026,6 +5073,7 @@ dependencies = [
  "bytes",
  "encoding_rs",
  "futures-core",
+ "futures-util",
  "h2",
  "http",
  "http-body",
@@ -5047,12 +5095,14 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tokio-native-tls",
+ "tokio-util",
  "tower",
  "tower-http",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
 ]
 
@@ -6915,6 +6965,7 @@ dependencies = [
  "ringbuf",
  "serde",
  "serde_json",
+ "tokio",
  "uuid",
 ]
 
