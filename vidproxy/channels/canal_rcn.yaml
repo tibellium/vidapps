@@ -43,14 +43,22 @@ process:
   filter:
     name:
       - "RCN Señal en Vivo"
+      - "Noticias RCN"
+      - "Deportes RCN"
       - "Señal Principal"
   transforms:
     - kind: AddCategory
       name: "RCN Señal en Vivo"
-      category: "General"
+      category: "RCN"
+    - kind: AddCategory
+      name: "Noticias RCN"
+      category: "RCN"
+    - kind: AddCategory
+      name: "Deportes RCN"
+      category: "RCN"
     - kind: AddCategory
       name: "Señal Principal"
-      category: "Entretenimiento"
+      category: "LCDLF"
     - kind: AddDescription
       name: "Señal Principal"
       description: "Transmisión en vivo 24/7"
