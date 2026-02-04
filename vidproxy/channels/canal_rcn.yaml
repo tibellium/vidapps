@@ -39,7 +39,6 @@ discovery:
 
 filter:
   name:
-    - "RCN Señal en Vivo"
     - "Señal Principal"
 
 # Content phase: for each channel, navigate to player and extract stream info
