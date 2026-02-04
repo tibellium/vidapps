@@ -42,6 +42,7 @@ fn extract_jsonpath(extractor: &Extractor, content: &str) -> Result<String> {
         serde_json::Value::String(s) => Ok(s),
         serde_json::Value::Number(n) => Ok(n.to_string()),
         serde_json::Value::Bool(b) => Ok(b.to_string()),
+        serde_json::Value::Null => Err(anyhow!("JSONPath '{}' returned null", path)),
         other => Ok(other.to_string()),
     }
 }
