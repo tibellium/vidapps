@@ -46,7 +46,6 @@ pub struct Coordinator {
     segment_manager: Arc<SegmentManager>,
     output_dir: std::path::PathBuf,
     segment_duration: Duration,
-    channel_name: String,
 }
 
 impl Coordinator {
@@ -57,7 +56,6 @@ impl Coordinator {
         segment_manager: Arc<SegmentManager>,
         output_dir: std::path::PathBuf,
         segment_duration: Duration,
-        channel_name: String,
     ) -> Self {
         Self {
             credentials_rx,
@@ -66,7 +64,6 @@ impl Coordinator {
             segment_manager,
             output_dir,
             segment_duration,
-            channel_name,
         }
     }
 

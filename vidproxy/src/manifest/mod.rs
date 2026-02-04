@@ -61,17 +61,17 @@ pub fn find_by_name(name: &str) -> Result<Manifest> {
     // Try matching filename
     for file in CHANNELS_DIR.files() {
         let path = file.path();
-        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-            if stem.to_lowercase() == name_lower || stem.to_lowercase().contains(&name_lower) {
-                let content = file
-                    .contents_utf8()
-                    .ok_or_else(|| anyhow!("Failed to read {:?} as UTF-8", path))?;
+        if let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+            && (stem.to_lowercase() == name_lower || stem.to_lowercase().contains(&name_lower))
+        {
+            let content = file
+                .contents_utf8()
+                .ok_or_else(|| anyhow!("Failed to read {:?} as UTF-8", path))?;
 
-                let manifest: Manifest = serde_yaml::from_str(content)
-                    .map_err(|e| anyhow!("Failed to parse {:?}: {}", path, e))?;
+            let manifest: Manifest = serde_yaml::from_str(content)
+                .map_err(|e| anyhow!("Failed to parse {:?}: {}", path, e))?;
 
-                return Ok(manifest);
-            }
+            return Ok(manifest);
         }
     }
 

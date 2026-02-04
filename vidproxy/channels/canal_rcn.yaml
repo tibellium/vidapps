@@ -29,8 +29,7 @@ steps:
       mpd_url:
         kind: url
       pssh:
-        kind: regex
-        path: "<(?:cenc:)?pssh[^>]*>([A-Za-z0-9+/=]+)</(?:cenc:)?pssh>"
+        kind: pssh
 
   - name: "get_license_url"
     kind: Sniff

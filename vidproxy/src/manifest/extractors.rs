@@ -11,6 +11,7 @@ pub fn extract(extractor: &Extractor, content: &str, url: &str) -> Result<String
         ExtractorKind::XPath => extract_xpath(extractor, content),
         ExtractorKind::Regex => extract_regex(extractor, content),
         ExtractorKind::Line => extract_line(content),
+        ExtractorKind::Pssh => extract_pssh(content, url),
     }
 }
 
@@ -110,6 +111,28 @@ fn extract_line(content: &str) -> Result<String> {
         .find(|line| line.contains(':'))
         .map(|s| s.to_string())
         .ok_or_else(|| anyhow!("No line containing ':' found"))
+}
+
+/// Extract Widevine PSSH from MPD manifest using ffmpeg-source DASH parser.
+fn extract_pssh(content: &str, url: &str) -> Result<String> {
+    use ffmpeg_source::reader::stream::StreamFormat;
+    use ffmpeg_source::reader::stream::dash::DashFormat;
+
+    let dash = DashFormat::from_manifest(url, content.as_bytes())
+        .map_err(|e| anyhow!("Failed to parse MPD: {}", e))?;
+
+    let drm_info = dash.drm_info();
+
+    // Get Widevine PSSH first, fall back to any PSSH
+    let pssh = drm_info
+        .widevine_pssh()
+        .into_iter()
+        .next()
+        .map(|p| &p.data_base64)
+        .or_else(|| drm_info.pssh_boxes.first().map(|p| &p.data_base64))
+        .ok_or_else(|| anyhow!("No PSSH found in MPD"))?;
+
+    Ok(pssh.clone())
 }
 
 #[cfg(test)]

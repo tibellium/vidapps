@@ -59,6 +59,7 @@ impl InterpolationContext {
     }
 
     /// Check if a string contains any interpolation placeholders.
+    #[allow(dead_code)]
     pub fn has_placeholders(s: &str) -> bool {
         s.contains("${{")
     }

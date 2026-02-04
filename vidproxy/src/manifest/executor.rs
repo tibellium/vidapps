@@ -107,10 +107,10 @@ async fn execute_sniff(
         }
 
         // Check method filter
-        if let Some(expected_method) = method_filter {
-            if method.as_str() != expected_method {
-                continue;
-            }
+        if let Some(expected_method) = method_filter
+            && method.as_str() != expected_method
+        {
+            continue;
         }
 
         println!("[executor] Matched request: {}", &url[..url.len().min(80)]);
@@ -123,6 +123,7 @@ async fn execute_sniff(
         };
 
         // Run extractors
+        let mut extraction_errors = Vec::new();
         for (output_name, extractor) in &step.extract {
             match extract(extractor, &body, &url) {
                 Ok(value) => {
@@ -130,12 +131,17 @@ async fn execute_sniff(
                     context.set(&step.name, output_name, value);
                 }
                 Err(e) => {
-                    println!(
-                        "[executor] Warning: Failed to extract {}.{}: {}",
-                        step.name, output_name, e
-                    );
+                    extraction_errors.push(format!("{}: {}", output_name, e));
                 }
             }
+        }
+
+        if !extraction_errors.is_empty() {
+            return Err(anyhow!(
+                "Failed to extract from step '{}': {}",
+                step.name,
+                extraction_errors.join("; ")
+            ));
         }
 
         return Ok(());

@@ -119,7 +119,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let segment_duration = Duration::from_secs(args.segment_duration);
     let coord_segment_manager = segment_manager.clone();
     let coord_output_dir = output_dir.clone();
-    let coord_channel_name = display_name.clone();
 
     let coordinator_handle = tokio::spawn(async move {
         let mut coordinator = coordinator::Coordinator::new(
@@ -129,7 +128,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             coord_segment_manager,
             coord_output_dir,
             segment_duration,
-            coord_channel_name,
         );
         if let Err(e) = coordinator.run().await {
             eprintln!("[coordinator] Error: {}", e);

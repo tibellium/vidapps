@@ -89,6 +89,8 @@ pub enum ExtractorKind {
     Regex,
     /// First line containing ":" (for CDRM key response)
     Line,
+    /// Extract Widevine PSSH from MPD manifest (uses ffmpeg-source DASH parser)
+    Pssh,
 }
 
 /// Final outputs from manifest execution.
