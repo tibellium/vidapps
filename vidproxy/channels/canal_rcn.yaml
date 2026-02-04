@@ -41,7 +41,6 @@ filter:
   name:
     - "RCN Señal en Vivo"
     - "Señal Principal"
-    - "Multiview"
 
 # Content phase: for each channel, navigate to player and extract stream info
 
