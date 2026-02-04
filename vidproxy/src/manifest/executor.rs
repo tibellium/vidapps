@@ -50,6 +50,10 @@ pub async fn execute(manifest: &Manifest, browser: &ChromeBrowser) -> Result<Man
     }
 
     // Resolve final outputs
+    let channel_name = match &manifest.outputs.channel_name {
+        Some(name) => context.interpolate(name)?,
+        None => manifest.channel.name.clone(),
+    };
     let mpd_url = context.interpolate(&manifest.outputs.mpd_url)?;
     let decryption_key = context.interpolate(&manifest.outputs.decryption_key)?;
     let thumbnail_url = manifest
@@ -60,6 +64,7 @@ pub async fn execute(manifest: &Manifest, browser: &ChromeBrowser) -> Result<Man
         .transpose()?;
 
     Ok(ManifestOutputs {
+        channel_name,
         mpd_url,
         decryption_key,
         thumbnail_url,

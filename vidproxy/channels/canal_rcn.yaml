@@ -19,6 +19,9 @@ steps:
       content_id:
         kind: jsonpath
         path: "$.result[?(@.content.title == 'Señal Principal')].id"
+      channel_name:
+        kind: jsonpath
+        path: "$.result[?(@.content.title == 'Señal Principal')].content.title"
       thumbnail_url:
         kind: jsonpath
         path: "$.result[?(@.content.title == 'Señal Principal')].content.images[0].url"
@@ -55,6 +58,7 @@ steps:
         kind: line
 
 outputs:
+  channel_name: "${{find_content.channel_name}}"
   mpd_url: "${{get_manifest.mpd_url}}"
   decryption_key: "${{fetch_keys.decryption_key}}"
   thumbnail_url: "${{find_content.thumbnail_url}}"

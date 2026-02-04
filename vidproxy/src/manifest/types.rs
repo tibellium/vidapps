@@ -116,6 +116,9 @@ pub enum ExtractorKind {
 /// Final outputs from manifest execution.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Outputs {
+    /// Optional channel name override (supports interpolation, defaults to channel.name)
+    #[serde(default)]
+    pub channel_name: Option<String>,
     /// The manifest/stream URL (supports interpolation)
     pub mpd_url: String,
     /// The decryption key in "kid:key" format (supports interpolation)
@@ -128,6 +131,7 @@ pub struct Outputs {
 /// Resolved outputs after execution.
 #[derive(Debug, Clone)]
 pub struct ManifestOutputs {
+    pub channel_name: String,
     pub mpd_url: String,
     pub decryption_key: String,
     pub thumbnail_url: Option<String>,

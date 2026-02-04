@@ -120,6 +120,7 @@ impl DrmSniffer {
         };
 
         Ok(Some(StreamInfo {
+            channel_name: outputs.channel_name,
             mpd_url: outputs.mpd_url,
             decryption_key: outputs.decryption_key,
             license_url: String::new(), // Not needed for now

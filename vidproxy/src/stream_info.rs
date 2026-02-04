@@ -7,6 +7,8 @@ use tokio::sync::watch;
 */
 #[derive(Clone, Debug)]
 pub struct StreamInfo {
+    /// Channel display name
+    pub channel_name: String,
     /// The DASH/HLS manifest URL
     pub mpd_url: String,
     /// Decryption key in "key_id:key" format
