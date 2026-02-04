@@ -31,7 +31,7 @@ struct Args {
     headless: bool,
 
     /// HTTP server port
-    #[arg(short, long, default_value = "8080")]
+    #[arg(short, long, default_value = "8098")]
     port: u16,
 
     /// Number of segments to keep per channel
