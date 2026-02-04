@@ -6,6 +6,7 @@ use clap::Parser;
 use tokio::{signal, sync::watch};
 
 mod cdrm;
+mod image_cache;
 mod manifest;
 mod pipeline;
 mod proxy;
@@ -14,6 +15,7 @@ mod segments;
 mod server;
 mod source;
 
+use image_cache::ImageCache;
 use pipeline::{PipelineConfig, PipelineStore};
 use registry::ChannelRegistry;
 use server::ManifestStore;
@@ -87,6 +89,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create manifest store for refresh operations
     let manifest_store = Arc::new(ManifestStore::new(args.headless));
 
+    // Create image cache for on-demand image fetching
+    let image_cache = Arc::new(ImageCache::new());
+
     // Load source manifests
     println!("Loading sources...");
     let manifests = manifest::load_all()?;
@@ -114,6 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_registry = Arc::clone(&registry);
     let server_pipeline_store = Arc::clone(&pipeline_store);
     let server_manifest_store = Arc::clone(&manifest_store);
+    let server_image_cache = Arc::clone(&image_cache);
     let server_shutdown_rx = shutdown_rx.clone();
 
     let server_handle = tokio::spawn(async move {
@@ -122,6 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             server_registry,
             server_pipeline_store,
             server_manifest_store,
+            server_image_cache,
             server_shutdown_rx,
         )
         .await

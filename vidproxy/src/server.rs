@@ -15,12 +15,15 @@ use chrono::{Duration, Utc};
 use tokio::sync::{RwLock, watch};
 use tokio_util::io::ReaderStream;
 
+use crate::image_cache::ImageCache;
 use crate::manifest::Manifest;
 use crate::pipeline::PipelineStore;
 use crate::registry::{ChannelId, ChannelRegistry, SourceState};
 use crate::source;
 
-/// Default timeout for waiting on source discovery (60 seconds)
+/**
+    Default timeout for waiting on source discovery (60 seconds)
+*/
 const SOURCE_WAIT_TIMEOUT: StdDuration = StdDuration::from_secs(60);
 
 /**
@@ -93,6 +96,7 @@ struct AppState {
     registry: Arc<ChannelRegistry>,
     pipeline_store: Arc<PipelineStore>,
     manifest_store: Arc<ManifestStore>,
+    image_cache: Arc<ImageCache>,
 }
 
 /**
@@ -130,12 +134,15 @@ async fn channels_m3u(
 
         let channel_name = entry.channel.name.as_deref().unwrap_or(&entry.channel.id);
 
-        let logo_attr = entry
-            .channel
-            .image
-            .as_ref()
-            .map(|url| format!(" tvg-logo=\"{}\"", url))
-            .unwrap_or_default();
+        // Use local image URL if channel has an image
+        let logo_attr = if entry.channel.image.is_some() {
+            format!(
+                " tvg-logo=\"http://{}/{}/{}/image\"",
+                host, source_id, entry.channel.id
+            )
+        } else {
+            String::new()
+        };
 
         let channel_id = format!("{}:{}", source_id, entry.channel.id);
 
@@ -161,6 +168,7 @@ async fn channels_m3u(
 async fn epg_xml(
     State(state): State<AppState>,
     Path(source_id): Path<String>,
+    headers: HeaderMap,
 ) -> Result<impl IntoResponse, StatusCode> {
     // Wait for source to be ready
     wait_for_source_ready(&state.registry, &source_id).await?;
@@ -169,6 +177,11 @@ async fn epg_xml(
     if channels.is_empty() {
         return Err(StatusCode::NOT_FOUND);
     }
+
+    let host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost:8080");
 
     let now = Utc::now();
     let start_of_day = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
@@ -185,12 +198,15 @@ async fn epg_xml(
         let channel_name = entry.channel.name.as_deref().unwrap_or(&entry.channel.id);
         let channel_id = format!("{}:{}", source_id, entry.channel.id);
 
-        let icon_element = entry
-            .channel
-            .image
-            .as_ref()
-            .map(|url| format!("    <icon src=\"{}\"/>\n", escape_xml(url)))
-            .unwrap_or_default();
+        // Use local image URL if channel has an image
+        let icon_element = if entry.channel.image.is_some() {
+            format!(
+                "    <icon src=\"http://{}/{}/{}/image\"/>\n",
+                host, source_id, entry.channel.id
+            )
+        } else {
+            String::new()
+        };
 
         channel_elements.push_str(&format!(
             "  <channel id=\"{id}\">\n\
@@ -474,6 +490,52 @@ fn escape_xml(s: &str) -> String {
 }
 
 /**
+    Serve a channel's image, fetching and caching on first request.
+*/
+async fn channel_image(
+    State(state): State<AppState>,
+    Path((source_id, channel_id)): Path<(String, String)>,
+) -> Result<Response, StatusCode> {
+    // Wait for source to be ready
+    wait_for_source_ready(&state.registry, &source_id).await?;
+
+    let id = ChannelId::new(&source_id, &channel_id);
+
+    // Get channel entry to find the image URL
+    let entry = state.registry.get(&id).ok_or(StatusCode::NOT_FOUND)?;
+
+    let image_url = entry.channel.image.as_ref().ok_or(StatusCode::NOT_FOUND)?;
+
+    // Get proxy setting from manifest
+    let proxy = state
+        .manifest_store
+        .get(&source_id)
+        .await
+        .and_then(|m| m.source.proxy.clone());
+
+    // Fetch from cache or download
+    let cached = state
+        .image_cache
+        .get_or_fetch(&id, image_url, proxy.as_deref())
+        .await
+        .map_err(|e| {
+            eprintln!(
+                "[server] Failed to fetch image for {}: {}",
+                id.to_string(),
+                e
+            );
+            StatusCode::BAD_GATEWAY
+        })?;
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, cached.content_type)
+        .header(header::CACHE_CONTROL, "public, max-age=86400")
+        .body(Body::from((*cached.data).clone()))
+        .unwrap())
+}
+
+/**
     Run the HTTP server.
 */
 pub async fn run_server(
@@ -481,18 +543,21 @@ pub async fn run_server(
     registry: Arc<ChannelRegistry>,
     pipeline_store: Arc<PipelineStore>,
     manifest_store: Arc<ManifestStore>,
+    image_cache: Arc<ImageCache>,
     mut shutdown_rx: watch::Receiver<bool>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let state = AppState {
         registry,
         pipeline_store,
         manifest_store,
+        image_cache,
     };
 
     let app = Router::new()
         .route("/{source_id}/channels.m3u", get(channels_m3u))
         .route("/{source_id}/epg.xml", get(epg_xml))
         .route("/{source_id}/{channel_id}/info", get(channel_info))
+        .route("/{source_id}/{channel_id}/image", get(channel_image))
         .route(
             "/{source_id}/{channel_id}/playlist.m3u8",
             get(stream_playlist),
