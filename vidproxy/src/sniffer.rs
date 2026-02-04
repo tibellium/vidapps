@@ -4,22 +4,22 @@ use anyhow::Result;
 use chrome_browser::{ChromeBrowser, ChromeLaunchOptions};
 use tokio::sync::watch;
 
-use crate::credentials::{CredentialsSender, StreamCredentials};
 use crate::manifest::{self, Manifest};
+use crate::stream_info::{StreamInfo, StreamInfoSender};
 
-/// DRM sniffer that discovers stream credentials using Chrome browser automation.
+/// DRM sniffer that discovers stream info using Chrome browser automation.
 pub struct DrmSniffer {
     manifest: Manifest,
     headless: bool,
-    credentials_tx: CredentialsSender,
+    stream_info_tx: StreamInfoSender,
 }
 
 impl DrmSniffer {
-    pub fn new(manifest: Manifest, headless: bool, credentials_tx: CredentialsSender) -> Self {
+    pub fn new(manifest: Manifest, headless: bool, stream_info_tx: StreamInfoSender) -> Self {
         Self {
             manifest,
             headless,
-            credentials_tx,
+            stream_info_tx,
         }
     }
 
@@ -37,15 +37,15 @@ impl DrmSniffer {
                 break;
             }
 
-            // Attempt to discover credentials
-            match self.discover_credentials(&mut shutdown_rx).await {
-                Ok(Some(credentials)) => {
-                    println!("[sniffer] Credentials discovered successfully");
+            // Attempt to discover stream info
+            match self.discover_stream_info(&mut shutdown_rx).await {
+                Ok(Some(info)) => {
+                    println!("[sniffer] Stream info discovered successfully");
                     println!(
                         "[sniffer] MPD URL: {}...",
-                        &credentials.mpd_url[..credentials.mpd_url.len().min(60)]
+                        &info.mpd_url[..info.mpd_url.len().min(60)]
                     );
-                    let _ = self.credentials_tx.send(Some(credentials));
+                    let _ = self.stream_info_tx.send(Some(info));
 
                     // Wait for refresh request or shutdown
                     loop {
@@ -88,12 +88,12 @@ impl DrmSniffer {
         Ok(())
     }
 
-    /// Discover stream credentials by executing the manifest.
+    /// Discover stream info by executing the manifest.
     /// Returns None if shutdown was requested during discovery.
-    async fn discover_credentials(
+    async fn discover_stream_info(
         &self,
         shutdown_rx: &mut watch::Receiver<bool>,
-    ) -> Result<Option<StreamCredentials>> {
+    ) -> Result<Option<StreamInfo>> {
         println!("[sniffer] Launching Chrome...");
 
         let mut options = ChromeLaunchOptions::default()
@@ -119,11 +119,12 @@ impl DrmSniffer {
             }
         };
 
-        Ok(Some(StreamCredentials {
+        Ok(Some(StreamInfo {
             mpd_url: outputs.mpd_url,
             decryption_key: outputs.decryption_key,
             license_url: String::new(), // Not needed for now
             pssh: String::new(),        // Not needed for now
+            thumbnail_url: outputs.thumbnail_url,
         }))
     }
 }

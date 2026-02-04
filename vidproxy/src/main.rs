@@ -6,12 +6,12 @@ use clap::Parser;
 use tokio::{signal, sync::watch};
 
 mod coordinator;
-mod credentials;
 mod manifest;
 mod proxy;
 mod segments;
 mod server;
 mod sniffer;
+mod stream_info;
 
 #[derive(Parser, Debug)]
 #[command(name = "vidproxy")]
@@ -77,11 +77,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create shutdown signal
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
+    // Create channels for coordination
+    let (stream_info_tx, stream_info_rx) = stream_info::stream_info_channel();
+    let (refresh_tx, refresh_rx) = coordinator::refresh_channel();
+
     // Start HTTP server
     let addr = SocketAddr::from(([0, 0, 0, 0], args.port));
     let server_shutdown_rx = shutdown_rx.clone();
     let server_segment_manager = segment_manager.clone();
     let server_channel_name = display_name.clone();
+    let server_stream_info_rx = stream_info_rx.clone();
 
     let server_handle = tokio::spawn(async move {
         server::run_server(
@@ -89,6 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             server_segment_manager,
             server_shutdown_rx,
             &server_channel_name,
+            server_stream_info_rx,
         )
         .await
     });
@@ -97,10 +103,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Stream: http://localhost:{}/playlist.m3u8", args.port);
     println!("IPTV playlist: http://localhost:{}/channels.m3u", args.port);
 
-    // Create channels for coordination
-    let (credentials_tx, credentials_rx) = credentials::credentials_channel();
-    let (refresh_tx, refresh_rx) = coordinator::refresh_channel();
-
     // Start sniffer task
     let sniffer_shutdown_rx = shutdown_rx.clone();
     let sniffer_manifest = channel_manifest.clone();
@@ -108,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let sniffer_handle = tokio::spawn(async move {
         let mut sniffer =
-            sniffer::DrmSniffer::new(sniffer_manifest, sniffer_headless, credentials_tx);
+            sniffer::DrmSniffer::new(sniffer_manifest, sniffer_headless, stream_info_tx);
         if let Err(e) = sniffer.run(sniffer_shutdown_rx, refresh_rx).await {
             eprintln!("[sniffer] Error: {}", e);
         }
@@ -122,7 +124,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let coordinator_handle = tokio::spawn(async move {
         let mut coordinator = coordinator::Coordinator::new(
-            credentials_rx,
+            stream_info_rx,
             refresh_tx,
             coord_shutdown_rx,
             coord_segment_manager,

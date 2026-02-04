@@ -19,6 +19,9 @@ steps:
       content_id:
         kind: jsonpath
         path: "$.result[?(@.content.title == 'Señal Principal')].id"
+      thumbnail_url:
+        kind: jsonpath
+        path: "$.result[?(@.content.title == 'Señal Principal')].content.images[0].url"
 
   - name: "go_to_player"
     kind: Navigate
@@ -54,3 +57,4 @@ steps:
 outputs:
   mpd_url: "${{get_manifest.mpd_url}}"
   decryption_key: "${{fetch_keys.decryption_key}}"
+  thumbnail_url: "${{find_content.thumbnail_url}}"

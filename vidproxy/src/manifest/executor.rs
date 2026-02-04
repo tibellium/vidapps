@@ -52,10 +52,17 @@ pub async fn execute(manifest: &Manifest, browser: &ChromeBrowser) -> Result<Man
     // Resolve final outputs
     let mpd_url = context.interpolate(&manifest.outputs.mpd_url)?;
     let decryption_key = context.interpolate(&manifest.outputs.decryption_key)?;
+    let thumbnail_url = manifest
+        .outputs
+        .thumbnail_url
+        .as_ref()
+        .map(|t| context.interpolate(t))
+        .transpose()?;
 
     Ok(ManifestOutputs {
         mpd_url,
         decryption_key,
+        thumbnail_url,
     })
 }
 

@@ -120,6 +120,9 @@ pub struct Outputs {
     pub mpd_url: String,
     /// The decryption key in "kid:key" format (supports interpolation)
     pub decryption_key: String,
+    /// Optional thumbnail URL for channel logo (supports interpolation)
+    #[serde(default)]
+    pub thumbnail_url: Option<String>,
 }
 
 /// Resolved outputs after execution.
@@ -127,4 +130,5 @@ pub struct Outputs {
 pub struct ManifestOutputs {
     pub mpd_url: String,
     pub decryption_key: String,
+    pub thumbnail_url: Option<String>,
 }

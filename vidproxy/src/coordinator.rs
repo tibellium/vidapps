@@ -3,9 +3,9 @@ use std::time::Duration;
 
 use tokio::sync::watch;
 
-use crate::credentials::{CredentialsReceiver, StreamCredentials};
 use crate::proxy;
 use crate::segments::SegmentManager;
+use crate::stream_info::{StreamInfo, StreamInfoReceiver};
 
 /**
     Result of a pipeline run.
@@ -40,7 +40,7 @@ pub fn refresh_channel() -> (RefreshSender, RefreshReceiver) {
     Coordinator that orchestrates the sniffer and remux pipeline.
 */
 pub struct Coordinator {
-    credentials_rx: CredentialsReceiver,
+    stream_info_rx: StreamInfoReceiver,
     refresh_tx: RefreshSender,
     shutdown_rx: watch::Receiver<bool>,
     segment_manager: Arc<SegmentManager>,
@@ -50,7 +50,7 @@ pub struct Coordinator {
 
 impl Coordinator {
     pub fn new(
-        credentials_rx: CredentialsReceiver,
+        stream_info_rx: StreamInfoReceiver,
         refresh_tx: RefreshSender,
         shutdown_rx: watch::Receiver<bool>,
         segment_manager: Arc<SegmentManager>,
@@ -58,7 +58,7 @@ impl Coordinator {
         segment_duration: Duration,
     ) -> Self {
         Self {
-            credentials_rx,
+            stream_info_rx,
             refresh_tx,
             shutdown_rx,
             segment_manager,
@@ -71,7 +71,7 @@ impl Coordinator {
         Run the coordinator loop.
     */
     pub async fn run(&mut self) -> anyhow::Result<()> {
-        println!("[coordinator] Starting, waiting for credentials...");
+        println!("[coordinator] Starting, waiting for stream info...");
 
         loop {
             // Check for shutdown
@@ -80,22 +80,22 @@ impl Coordinator {
                 break;
             }
 
-            // Wait for credentials
-            let credentials = match self.wait_for_credentials().await {
-                Some(creds) => creds,
+            // Wait for stream info
+            let stream_info = match self.wait_for_stream_info().await {
+                Some(info) => info,
                 None => {
-                    println!("[coordinator] Shutdown during credential wait");
+                    println!("[coordinator] Shutdown during stream info wait");
                     break;
                 }
             };
 
             println!(
-                "[coordinator] Got credentials, starting pipeline for: {}",
-                &credentials.mpd_url[..credentials.mpd_url.len().min(60)]
+                "[coordinator] Got stream info, starting pipeline for: {}",
+                &stream_info.mpd_url[..stream_info.mpd_url.len().min(60)]
             );
 
             // Run the pipeline
-            let result = self.run_pipeline(&credentials).await;
+            let result = self.run_pipeline(&stream_info).await;
 
             match result {
                 PipelineResult::Shutdown => {
@@ -120,23 +120,23 @@ impl Coordinator {
     }
 
     /**
-        Wait for credentials to become available.
+        Wait for stream info to become available.
     */
-    async fn wait_for_credentials(&mut self) -> Option<StreamCredentials> {
+    async fn wait_for_stream_info(&mut self) -> Option<StreamInfo> {
         loop {
-            // Check if we already have credentials
-            if let Some(ref creds) = *self.credentials_rx.borrow() {
-                return Some(creds.clone());
+            // Check if we already have stream info
+            if let Some(ref info) = *self.stream_info_rx.borrow() {
+                return Some(info.clone());
             }
 
-            // Wait for credentials or shutdown
+            // Wait for stream info or shutdown
             tokio::select! {
-                result = self.credentials_rx.changed() => {
+                result = self.stream_info_rx.changed() => {
                     if result.is_err() {
                         return None;
                     }
-                    if let Some(ref creds) = *self.credentials_rx.borrow() {
-                        return Some(creds.clone());
+                    if let Some(ref info) = *self.stream_info_rx.borrow() {
+                        return Some(info.clone());
                     }
                 }
                 _ = self.shutdown_rx.changed() => {
@@ -149,11 +149,11 @@ impl Coordinator {
     }
 
     /**
-        Run the remux pipeline with the given credentials.
+        Run the remux pipeline with the given stream info.
     */
-    async fn run_pipeline(&self, credentials: &StreamCredentials) -> PipelineResult {
-        let input_url = credentials.mpd_url.clone();
-        let decryption_key = Some(credentials.decryption_key.clone());
+    async fn run_pipeline(&self, stream_info: &StreamInfo) -> PipelineResult {
+        let input_url = stream_info.mpd_url.clone();
+        let decryption_key = Some(stream_info.decryption_key.clone());
         let output_dir = self.output_dir.clone();
         let segment_duration = self.segment_duration;
         let segment_manager = Arc::clone(&self.segment_manager);
