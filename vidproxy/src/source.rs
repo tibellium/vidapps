@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use chrome_browser::{ChromeBrowser, ChromeLaunchOptions};
 
-use crate::manifest::{self, ChannelEntry, DiscoveredChannel, Manifest, StreamInfo};
+use crate::manifest::{self, ChannelEntry, DiscoveredChannel, Manifest, StreamInfo, Transform};
 
 const MAX_RETRIES: u32 = 3;
 const RETRY_DELAY_MS: u64 = 1000;
@@ -54,31 +54,43 @@ pub async fn run_source(manifest: &Manifest, headless: bool) -> Result<SourceRes
     let channels = discovery_result.channels;
     println!("[source] Discovery found {} channels", channels.len());
 
-    // Apply filter if present
-    let channels: Vec<DiscoveredChannel> = if let Some(ref filter) = manifest.filter {
-        let filtered: Vec<_> = channels
-            .into_iter()
-            .filter(|c| {
-                // If name filter is set, check if channel name matches any
-                let name_match = filter.name.is_empty()
-                    || c.name
-                        .as_ref()
-                        .map(|n| filter.name.contains(n))
-                        .unwrap_or(false);
+    // Apply processing phase if present (filter + transforms)
+    let channels: Vec<DiscoveredChannel> = if let Some(ref process) = manifest.process {
+        // First apply filter if present
+        let mut channels: Vec<_> = if let Some(ref filter) = process.filter {
+            let filtered: Vec<_> = channels
+                .into_iter()
+                .filter(|c| {
+                    // If name filter is set, check if channel name matches any
+                    let name_match = filter.name.is_empty()
+                        || c.name
+                            .as_ref()
+                            .map(|n| filter.name.contains(n))
+                            .unwrap_or(false);
 
-                // If id filter is set, check if channel id matches any
-                let id_match = filter.id.is_empty() || filter.id.contains(&c.id);
+                    // If id filter is set, check if channel id matches any
+                    let id_match = filter.id.is_empty() || filter.id.contains(&c.id);
 
-                // Channel passes if it matches both filters (or filter is empty)
-                name_match && id_match
-            })
-            .collect();
+                    // Channel passes if it matches both filters (or filter is empty)
+                    name_match && id_match
+                })
+                .collect();
 
-        println!(
-            "[source] Filter applied: {} channels remaining",
-            filtered.len()
-        );
-        filtered
+            println!(
+                "[source] Filter applied: {} channels remaining",
+                filtered.len()
+            );
+            filtered
+        } else {
+            channels
+        };
+
+        // Then apply transforms
+        for transform in &process.transforms {
+            apply_transform(&mut channels, transform);
+        }
+
+        channels
     } else {
         channels
     };
@@ -222,4 +234,50 @@ pub async fn refresh_channel(
     let _ = browser.close().await;
 
     Ok(stream_info)
+}
+
+/**
+    Apply a transform to a list of channels.
+*/
+fn apply_transform(channels: &mut [DiscoveredChannel], transform: &Transform) {
+    match transform {
+        Transform::AddCategory { name, id, category } => {
+            for channel in channels.iter_mut() {
+                if channel_matches(channel, name, id) {
+                    channel.category = Some(category.clone());
+                }
+            }
+        }
+        Transform::AddDescription {
+            name,
+            id,
+            description,
+        } => {
+            for channel in channels.iter_mut() {
+                if channel_matches(channel, name, id) {
+                    channel.description = Some(description.clone());
+                }
+            }
+        }
+    }
+}
+
+fn channel_matches(
+    channel: &DiscoveredChannel,
+    name: &Option<String>,
+    id: &Option<String>,
+) -> bool {
+    let name_matches = name
+        .as_ref()
+        .map(|n| channel.name.as_ref() == Some(n))
+        .unwrap_or(true);
+    let id_matches = id.as_ref().map(|i| &channel.id == i).unwrap_or(true);
+
+    // If both name and id are None, match all channels
+    // Otherwise, require at least one to be specified and match
+    if name.is_none() && id.is_none() {
+        true
+    } else {
+        (name.is_some() && name_matches) || (id.is_some() && id_matches)
+    }
 }

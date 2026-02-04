@@ -10,6 +10,7 @@ use super::types::{MetadataPhase, Programme};
 /**
     Result of running the metadata phase - EPG for all channels.
 */
+#[allow(dead_code)]
 pub struct MetadataResult {
     /// EPG programmes keyed by channel ID
     pub programmes_by_channel: HashMap<String, Vec<Programme>>,

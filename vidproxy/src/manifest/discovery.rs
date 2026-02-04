@@ -49,6 +49,8 @@ pub async fn execute_discovery(
             id,
             name,
             image,
+            category: None,
+            description: None,
             source: source_id.to_string(),
         });
     }

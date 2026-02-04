@@ -12,7 +12,7 @@ mod types;
 pub use content::execute_content;
 pub use discovery::execute_discovery;
 pub use metadata::execute_metadata;
-pub use types::{ChannelEntry, DiscoveredChannel, Manifest, Programme, StreamInfo};
+pub use types::{ChannelEntry, DiscoveredChannel, Manifest, Programme, StreamInfo, Transform};
 
 /**
     Embedded channel manifests directory.

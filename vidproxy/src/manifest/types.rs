@@ -9,13 +9,26 @@ use serde::{Deserialize, Serialize};
 pub struct Manifest {
     pub source: Source,
     pub discovery: DiscoveryPhase,
-    /// Optional filter to apply after discovery
+    /// Optional processing phase to filter and transform channels
     #[serde(default)]
-    pub filter: Option<ChannelFilter>,
+    pub process: Option<ProcessPhase>,
     /// Optional metadata phase to extract EPG data per channel
     #[serde(default)]
     pub metadata: Option<MetadataPhase>,
     pub content: ContentPhase,
+}
+
+/**
+    Processing phase - filter and transform discovered channels.
+*/
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct ProcessPhase {
+    /// Filter to select which channels to include
+    #[serde(default)]
+    pub filter: Option<ChannelFilter>,
+    /// Transforms to apply to matching channels
+    #[serde(default)]
+    pub transforms: Vec<Transform>,
 }
 
 /**
@@ -30,6 +43,36 @@ pub struct ChannelFilter {
     /// Filter by channel ID (exact match)
     #[serde(default)]
     pub id: Vec<String>,
+}
+
+/**
+    A transform to apply to channels.
+*/
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "kind")]
+pub enum Transform {
+    /// Add a category/genre to channels matching by name or id
+    AddCategory {
+        /// Channel name to match (optional)
+        #[serde(default)]
+        name: Option<String>,
+        /// Channel ID to match (optional)
+        #[serde(default)]
+        id: Option<String>,
+        /// Category value to add
+        category: String,
+    },
+    /// Add a description to channels matching by name or id
+    AddDescription {
+        /// Channel name to match (optional)
+        #[serde(default)]
+        name: Option<String>,
+        /// Channel ID to match (optional)
+        #[serde(default)]
+        id: Option<String>,
+        /// Description value to add
+        description: String,
+    },
 }
 
 /**
@@ -257,6 +300,8 @@ pub struct DiscoveredChannel {
     pub id: String,
     pub name: Option<String>,
     pub image: Option<String>,
+    pub category: Option<String>,
+    pub description: Option<String>,
     pub source: String,
 }
 

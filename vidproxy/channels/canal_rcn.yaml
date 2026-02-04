@@ -37,12 +37,23 @@ discovery:
             name: "$.content.title"
             image: "$.content.images[?(@.type=='THUMB')].url"
 
-# Filter phase: only include channels we care about
+# Processing phase: only include channels we care about
 
-filter:
-  name:
-    - "RCN Señal en Vivo"
-    - "Señal Principal"
+process:
+  filter:
+    name:
+      - "RCN Señal en Vivo"
+      - "Señal Principal"
+  transforms:
+    - kind: AddCategory
+      name: "RCN Señal en Vivo"
+      category: "General"
+    - kind: AddCategory
+      name: "Señal Principal"
+      category: "Entretenimiento"
+    - kind: AddDescription
+      name: "Señal Principal"
+      description: "Transmisión en vivo 24/7"
 
 # Metadata phase: extract EPG data for all channels
 

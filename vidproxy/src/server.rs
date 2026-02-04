@@ -289,12 +289,19 @@ async fn source_m3u(
 
         let channel_id = format!("{}:{}", source_id, entry.channel.id);
 
+        // Use channel category if set, otherwise fall back to source name
+        let group = entry
+            .channel
+            .category
+            .as_ref()
+            .unwrap_or(&manifest.source.name);
+
         playlist.push_str(&format!(
             "#EXTINF:-1 tvg-id=\"{id}\" tvg-name=\"{name}\" tvg-type=\"live\" group-title=\"{group}\"{logo}{country}{language},{name}\n\
              {base_url}/{source}/{channel}/playlist.m3u8\n",
             id = escape_xml(&channel_id),
             name = escape_xml(channel_name),
-            group = escape_xml(&manifest.source.name),
+            group = escape_xml(group),
             logo = logo_attr,
             country = country_attr,
             language = language_attr,
@@ -375,6 +382,14 @@ async fn source_epg(
             icon = icon_element,
         ));
 
+        // Build category element if channel has a category
+        let category_element = entry
+            .channel
+            .category
+            .as_ref()
+            .map(|c| format!("    <category{}>{}</category>\n", lang_attr, escape_xml(c)))
+            .unwrap_or_default();
+
         // Use real programme data if available, otherwise generate placeholder
         if entry.programmes.is_empty() {
             // Generate 7 days of placeholder programming
@@ -386,10 +401,12 @@ async fn source_epg(
                     "  <programme start=\"{start}\" stop=\"{stop}\" channel=\"{id}\">\n\
                      \x20   <title{lang}>{name}</title>\n\
                      \x20   <desc{lang}>Live broadcast</desc>\n\
+                     {category}\
                      \x20 </programme>\n",
                     start = day_start.format("%Y%m%d%H%M%S %z"),
                     stop = day_end.format("%Y%m%d%H%M%S %z"),
                     id = escape_xml(&channel_id),
+                    category = category_element,
                     name = escape_xml(channel_name),
                     lang = lang_attr,
                 ));
@@ -408,12 +425,19 @@ async fn source_epg(
                     .map(|d| format!("    <desc{}>{}</desc>\n", lang_attr, escape_xml(d)))
                     .unwrap_or_default();
 
-                // Build category elements
-                let category_elements: String = programme
-                    .genres
-                    .iter()
-                    .map(|g| format!("    <category{}>{}</category>\n", lang_attr, escape_xml(g)))
-                    .collect();
+                // Build category elements - use programme genres if available, otherwise channel category
+                let category_elements: String = if programme.genres.is_empty() {
+                    // Fall back to channel category
+                    category_element.clone()
+                } else {
+                    programme
+                        .genres
+                        .iter()
+                        .map(|g| {
+                            format!("    <category{}>{}</category>\n", lang_attr, escape_xml(g))
+                        })
+                        .collect()
+                };
 
                 // Build episode-num element if available
                 let episode_element = match (&programme.season, &programme.episode) {
