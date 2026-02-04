@@ -65,6 +65,8 @@ async fn execute_navigate(
     tab: &ChromeBrowserTab,
     context: &InterpolationContext,
 ) -> Result<()> {
+    use super::types::WaitCondition;
+
     let url_template = step
         .url
         .as_ref()
@@ -73,6 +75,20 @@ async fn execute_navigate(
     let url = context.interpolate(url_template)?;
     println!("[executor] Navigating to: {}", url);
     tab.navigate(&url).await?;
+
+    // Wait for condition if specified
+    if let Some(wait_for) = &step.wait_for {
+        match wait_for {
+            WaitCondition::Selector(selector) => {
+                println!("[executor] Waiting for selector: {}", selector);
+                tab.wait_for_selector(selector).await?;
+            }
+            WaitCondition::Function(expr) => {
+                println!("[executor] Waiting for function: {}", expr);
+                tab.wait_for_function(expr).await?;
+            }
+        }
+    }
 
     Ok(())
 }

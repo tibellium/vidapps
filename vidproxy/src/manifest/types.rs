@@ -30,6 +30,9 @@ pub struct Step {
     /// URL for Navigate steps (supports interpolation)
     #[serde(default)]
     pub url: Option<String>,
+    /// Wait condition for Navigate steps (CSS selector or JS expression)
+    #[serde(default)]
+    pub wait_for: Option<WaitCondition>,
     /// Request matching for Sniff steps
     #[serde(default)]
     pub request: Option<RequestMatch>,
@@ -42,6 +45,16 @@ pub struct Step {
     /// Extractors to run on the response
     #[serde(default)]
     pub extract: HashMap<String, Extractor>,
+}
+
+/// Wait condition after navigation.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WaitCondition {
+    /// Wait for a CSS selector to appear
+    Selector(String),
+    /// Wait for a JS expression to return truthy
+    Function(String),
 }
 
 /// The kind of step.
