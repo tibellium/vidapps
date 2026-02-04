@@ -3,6 +3,9 @@ use chrome_browser::{ChromeBrowser, ChromeLaunchOptions};
 
 use crate::manifest::{self, ChannelEntry, DiscoveredChannel, Manifest, StreamInfo};
 
+const MAX_RETRIES: u32 = 3;
+const RETRY_DELAY_MS: u64 = 1000;
+
 /**
     Result of running a source - all discovered channels with their stream info.
 */
@@ -87,29 +90,39 @@ pub async fn run_source(manifest: &Manifest, headless: bool) -> Result<SourceRes
         let channel_name = channel.name.as_deref().unwrap_or(&channel.id);
         println!("[source] Running content phase for: {}", channel_name);
 
-        match manifest::execute_content(&manifest.content, &tab, channel).await {
-            Ok(stream_info) => {
-                println!("[source] Content phase completed for: {}", channel_name);
-                channel_entries.push(ChannelEntry {
-                    channel: channel.clone(),
-                    stream_info: Some(stream_info),
-                    last_error: None,
-                });
-            }
-            Err(e) => {
-                // Log error but continue with other channels
-                // TODO: Implement retry mechanism here in the future
-                eprintln!(
-                    "[source] Content phase failed for '{}': {}",
-                    channel_name, e
-                );
-                channel_entries.push(ChannelEntry {
-                    channel: channel.clone(),
-                    stream_info: None,
-                    last_error: Some(e.to_string()),
-                });
+        let mut last_error = None;
+        let mut stream_info = None;
+
+        for attempt in 1..=MAX_RETRIES {
+            match manifest::execute_content(&manifest.content, &tab, channel).await {
+                Ok(info) => {
+                    println!("[source] Content phase completed for: {}", channel_name);
+                    stream_info = Some(info);
+                    break;
+                }
+                Err(e) => {
+                    last_error = Some(e.to_string());
+                    if attempt < MAX_RETRIES {
+                        eprintln!(
+                            "[source] Content phase failed for '{}' (attempt {}/{}): {}",
+                            channel_name, attempt, MAX_RETRIES, e
+                        );
+                        tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                    } else {
+                        eprintln!(
+                            "[source] Content phase failed for '{}' after {} attempts: {}",
+                            channel_name, MAX_RETRIES, e
+                        );
+                    }
+                }
             }
         }
+
+        channel_entries.push(ChannelEntry {
+            channel: channel.clone(),
+            stream_info,
+            last_error,
+        });
     }
 
     // Close browser
