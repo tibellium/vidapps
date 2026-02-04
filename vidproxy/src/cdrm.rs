@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 const CDRM_API_URL: &str = "https://cdrm-project.com/api/decrypt";
@@ -16,9 +17,12 @@ struct CdrmResponse {
 }
 
 /**
-    Extract PSSH from an MPD manifest
+    Extract PSSH and default_KID from an MPD manifest
 */
-pub fn extract_pssh_from_mpd(mpd_url: &str, mpd_content: &str) -> Result<String> {
+pub fn extract_drm_info_from_mpd(
+    mpd_url: &str,
+    mpd_content: &str,
+) -> Result<(String, Option<String>)> {
     use ffmpeg_source::reader::stream::StreamFormat;
     use ffmpeg_source::reader::stream::dash::DashFormat;
 
@@ -36,14 +40,31 @@ pub fn extract_pssh_from_mpd(mpd_url: &str, mpd_content: &str) -> Result<String>
         .or_else(|| drm_info.pssh_boxes.first().map(|p| &p.data_base64))
         .ok_or_else(|| anyhow!("No PSSH found in MPD"))?;
 
-    Ok(pssh.clone())
+    // Extract default_KID from MPD content using regex
+    // Format: cenc:default_KID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    let default_kid = extract_default_kid_from_mpd(mpd_content);
+
+    Ok((pssh.clone(), default_kid))
 }
 
 /**
-    Fetch decryption key from CDRM API
+    Extract the default_KID attribute from MPD XML content.
 */
-pub async fn fetch_decryption_key(pssh: &str, license_url: &str) -> Result<String> {
-    println!("[cdrm] Requesting decryption key from CDRM API...");
+fn extract_default_kid_from_mpd(mpd_content: &str) -> Option<String> {
+    // Match cenc:default_KID="..." with UUID format (with or without dashes)
+    let re = Regex::new(r#"default_KID="([0-9a-fA-F-]+)""#).ok()?;
+    re.captures(mpd_content)
+        .and_then(|caps| caps.get(1))
+        .map(|m| m.as_str().replace('-', "").to_lowercase())
+}
+
+/**
+    Fetch all decryption keys from CDRM API.
+
+    Returns all keys in "kid:key" format.
+*/
+pub async fn fetch_decryption_keys(pssh: &str, license_url: &str) -> Result<Vec<String>> {
+    println!("[cdrm] Requesting decryption keys from CDRM API...");
 
     let client = reqwest::Client::new();
     let cdrm_req = CdrmRequest {
@@ -69,29 +90,38 @@ pub async fn fetch_decryption_key(pssh: &str, license_url: &str) -> Result<Strin
 
     let cdrm_resp: CdrmResponse = resp.json().await?;
 
-    // Extract first line containing ":" (the key format is "kid:key")
-    let key = cdrm_resp
+    // Extract all keys (format is "kid:key" per line)
+    let keys: Vec<String> = cdrm_resp
         .message
         .lines()
-        .find(|line| line.contains(':'))
+        .filter(|line| line.contains(':') && line.len() > 32)
         .map(|s| s.to_string())
-        .ok_or_else(|| anyhow!("No decryption key found in CDRM response"))?;
+        .collect();
 
-    println!("[cdrm] Got decryption key");
-    Ok(key)
+    if keys.is_empty() {
+        return Err(anyhow!("No decryption keys found in CDRM response"));
+    }
+
+    println!("[cdrm] Got {} decryption key(s)", keys.len());
+    Ok(keys)
 }
 
 /**
-    Fetch MPD content and extract PSSH, then get decryption key
+    Fetch MPD content and extract PSSH, then get all decryption keys.
+
+    Returns all keys in "kid:key" format.
 */
-pub async fn get_decryption_key(mpd_url: &str, license_url: &str) -> Result<String> {
+pub async fn get_decryption_keys(mpd_url: &str, license_url: &str) -> Result<Vec<String>> {
     println!("[cdrm] Fetching MPD to extract PSSH...");
 
     let client = reqwest::Client::new();
     let mpd_content = client.get(mpd_url).send().await?.text().await?;
 
-    let pssh = extract_pssh_from_mpd(mpd_url, &mpd_content)?;
+    let (pssh, default_kid) = extract_drm_info_from_mpd(mpd_url, &mpd_content)?;
     println!("[cdrm] Extracted PSSH: {}...", &pssh[..pssh.len().min(30)]);
+    if let Some(ref kid) = default_kid {
+        println!("[cdrm] MPD default_KID: {}...", &kid[..kid.len().min(8)]);
+    }
 
-    fetch_decryption_key(&pssh, license_url).await
+    fetch_decryption_keys(&pssh, license_url).await
 }

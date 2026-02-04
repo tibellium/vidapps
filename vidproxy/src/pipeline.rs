@@ -188,17 +188,21 @@ impl ChannelPipeline {
                 }
             };
 
-            // Fetch decryption key if needed
-            let decryption_key = if let Some(ref lic_url) = license_url {
-                match cdrm::get_decryption_key(&mpd_url, lic_url).await {
-                    Ok(key) => {
-                        println!("[pipeline:{}] Got decryption key", channel_id);
-                        Some(key)
+            // Fetch decryption keys if needed
+            let decryption_keys: Vec<String> = if let Some(ref lic_url) = license_url {
+                match cdrm::get_decryption_keys(&mpd_url, lic_url).await {
+                    Ok(keys) => {
+                        println!(
+                            "[pipeline:{}] Got {} decryption key(s)",
+                            channel_id,
+                            keys.len()
+                        );
+                        keys
                     }
                     Err(e) => {
                         let error_str = e.to_string();
                         eprintln!(
-                            "[pipeline:{}] Failed to get decryption key: {}",
+                            "[pipeline:{}] Failed to get decryption keys: {}",
                             channel_id, error_str
                         );
                         let is_auth = is_auth_error(&error_str);
@@ -207,7 +211,7 @@ impl ChannelPipeline {
                     }
                 }
             } else {
-                None
+                Vec::new()
             };
 
             let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -225,7 +229,7 @@ impl ChannelPipeline {
                 rt.block_on(proxy::run_remux_pipeline(
                     &mpd_url,
                     &[],
-                    decryption_key.as_deref(),
+                    &decryption_keys,
                     &output_dir,
                     segment_duration,
                     segment_manager,

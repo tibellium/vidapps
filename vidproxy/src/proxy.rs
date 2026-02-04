@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ffmpeg_sink::{Sink, SinkConfig};
-use ffmpeg_source::{Source, SourceConfig};
+use ffmpeg_source::{DecryptionKey, Source, SourceConfig};
 use tokio::sync::watch;
 
 use crate::segments::SegmentManager;
@@ -18,24 +18,33 @@ use crate::segments::SegmentManager;
 pub async fn run_remux_pipeline(
     input_url: &str,
     #[allow(unused_variables)] headers: &[(String, String)],
-    decryption_key: Option<&str>,
+    decryption_keys: &[String],
     output_dir: &Path,
     segment_duration: Duration,
     segment_manager: Arc<SegmentManager>,
     mut shutdown_rx: watch::Receiver<bool>,
 ) -> Result<(), ffmpeg_types::Error> {
-    // Build source config with decryption key if provided
+    // Build source config with decryption keys if provided
     let mut source_config = SourceConfig::default();
-    if let Some(key) = decryption_key {
-        // The new API requires separate key_id and key values in "key_id:key" format
-        if let Some((key_id, key_value)) = key.split_once(':') {
-            source_config = source_config.with_decryption_key(key_id, key_value);
-            println!(
-                "Using CENC decryption key_id: {}...",
-                &key_id[..8.min(key_id.len())]
-            );
-        } else {
-            eprintln!("Warning: decryption key must be in 'key_id:key' format, ignoring");
+    if !decryption_keys.is_empty() {
+        let keys: Vec<DecryptionKey> = decryption_keys
+            .iter()
+            .filter_map(|key| {
+                if let Some((key_id, key_value)) = key.split_once(':') {
+                    Some(DecryptionKey {
+                        key_id: key_id.to_string(),
+                        key: key_value.to_string(),
+                    })
+                } else {
+                    eprintln!("Warning: decryption key must be in 'key_id:key' format, ignoring");
+                    None
+                }
+            })
+            .collect();
+
+        if !keys.is_empty() {
+            println!("Using {} CENC decryption key(s)", keys.len());
+            source_config = source_config.with_decryption_keys(keys);
         }
     }
 
