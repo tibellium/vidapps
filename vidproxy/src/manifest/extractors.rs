@@ -9,6 +9,7 @@ use super::types::{Extractor, ExtractorKind};
 pub fn extract(extractor: &Extractor, content: &str, url: &str) -> Result<String> {
     match extractor.kind {
         ExtractorKind::Url => Ok(url.to_string()),
+        ExtractorKind::UrlRegex => extract_regex(extractor, url),
         ExtractorKind::JsonPath => extract_jsonpath(extractor, content),
         ExtractorKind::XPath => extract_xpath(extractor, content),
         ExtractorKind::Regex => extract_regex(extractor, content),

@@ -19,6 +19,8 @@ pub struct StreamInfo {
     pub pssh: String,
     /// Optional thumbnail URL for channel logo
     pub thumbnail_url: Option<String>,
+    /// Optional expiration timestamp (Unix seconds)
+    pub expires_at: Option<u64>,
 }
 
 pub type StreamInfoReceiver = watch::Receiver<Option<StreamInfo>>;

@@ -39,6 +39,9 @@ steps:
         kind: url
       pssh:
         kind: pssh
+      expires_at:
+        kind: urlregex
+        path: "expires=(\\d+)"
 
   - name: "get_license_url"
     kind: Sniff
@@ -62,3 +65,4 @@ outputs:
   mpd_url: "${{get_manifest.mpd_url}}"
   decryption_key: "${{fetch_keys.decryption_key}}"
   thumbnail_url: "${{find_content.thumbnail_url}}"
+  expires_at: "${{get_manifest.expires_at}}"

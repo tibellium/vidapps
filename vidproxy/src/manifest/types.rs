@@ -117,6 +117,8 @@ pub struct Extractor {
 pub enum ExtractorKind {
     /// Capture the request URL itself
     Url,
+    /// Regex with capture group on the request URL
+    UrlRegex,
     /// JSONPath query on JSON response body
     JsonPath,
     /// XPath query on XML response body
@@ -144,6 +146,9 @@ pub struct Outputs {
     /// Optional thumbnail URL for channel logo (supports interpolation)
     #[serde(default)]
     pub thumbnail_url: Option<String>,
+    /// Optional expiration timestamp in Unix seconds (supports interpolation)
+    #[serde(default)]
+    pub expires_at: Option<String>,
 }
 
 /**
@@ -155,4 +160,5 @@ pub struct ManifestOutputs {
     pub mpd_url: String,
     pub decryption_key: String,
     pub thumbnail_url: Option<String>,
+    pub expires_at: Option<u64>,
 }

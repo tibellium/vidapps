@@ -64,12 +64,20 @@ pub async fn execute(manifest: &Manifest, browser: &ChromeBrowser) -> Result<Man
         .as_ref()
         .map(|t| context.interpolate(t))
         .transpose()?;
+    let expires_at = manifest
+        .outputs
+        .expires_at
+        .as_ref()
+        .map(|e| context.interpolate(e))
+        .transpose()?
+        .and_then(|s| s.parse::<u64>().ok());
 
     Ok(ManifestOutputs {
         channel_name,
         mpd_url,
         decryption_key,
         thumbnail_url,
+        expires_at,
     })
 }
 

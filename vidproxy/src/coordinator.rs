@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use chrono::Utc;
 use tokio::sync::watch;
 
 use crate::proxy;
@@ -18,6 +19,8 @@ pub enum PipelineResult {
     SourceError(String),
     /// Pipeline stopped due to sink error (may retry with same credentials)
     SinkError(String),
+    /// Pipeline stopped due to stream expiration (proactive refresh)
+    Expired,
 }
 
 /**
@@ -94,13 +97,43 @@ impl Coordinator {
                 &stream_info.mpd_url[..stream_info.mpd_url.len().min(60)]
             );
 
-            // Run the pipeline
-            let result = self.run_pipeline(&stream_info).await;
+            // Calculate refresh time if we have an expiration
+            let refresh_at = stream_info.expires_at.map(|expires| {
+                let now = Utc::now().timestamp() as u64;
+                if expires > now {
+                    // Refresh 60 seconds before expiration
+                    let refresh_in = expires.saturating_sub(now).saturating_sub(60);
+                    if refresh_in > 0 {
+                        println!(
+                            "[coordinator] Stream expires in {}s, will refresh in {}s",
+                            expires - now,
+                            refresh_in
+                        );
+                        Duration::from_secs(refresh_in)
+                    } else {
+                        // Already close to expiring, refresh soon
+                        println!("[coordinator] Stream expiring soon, will refresh in 5s");
+                        Duration::from_secs(5)
+                    }
+                } else {
+                    println!("[coordinator] Stream already expired, refreshing immediately");
+                    Duration::ZERO
+                }
+            });
+
+            // Run the pipeline with optional expiration-based refresh
+            let result = self.run_pipeline(&stream_info, refresh_at).await;
 
             match result {
                 PipelineResult::Shutdown => {
                     println!("[coordinator] Pipeline shutdown");
                     break;
+                }
+                PipelineResult::Expired => {
+                    println!("[coordinator] Stream expiring, requesting refresh...");
+                    let _ = self.refresh_tx.send(true);
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    let _ = self.refresh_tx.send(false);
                 }
                 PipelineResult::SourceError(e) => {
                     println!("[coordinator] Source error: {}, requesting refresh...", e);
@@ -150,8 +183,13 @@ impl Coordinator {
 
     /**
         Run the remux pipeline with the given stream info.
+        If `refresh_after` is Some, the pipeline will be stopped for refresh after that duration.
     */
-    async fn run_pipeline(&self, stream_info: &StreamInfo) -> PipelineResult {
+    async fn run_pipeline(
+        &self,
+        stream_info: &StreamInfo,
+        refresh_after: Option<Duration>,
+    ) -> PipelineResult {
         let input_url = stream_info.mpd_url.clone();
         let decryption_key = Some(stream_info.decryption_key.clone());
         let output_dir = self.output_dir.clone();
@@ -160,7 +198,7 @@ impl Coordinator {
         let shutdown_rx = self.shutdown_rx.clone();
 
         // Run pipeline in blocking task
-        let result = tokio::task::spawn_blocking(move || {
+        let pipeline_handle = tokio::task::spawn_blocking(move || {
             let rt = tokio::runtime::Handle::current();
             rt.block_on(proxy::run_remux_pipeline(
                 &input_url,
@@ -171,8 +209,19 @@ impl Coordinator {
                 segment_manager,
                 shutdown_rx,
             ))
-        })
-        .await;
+        });
+
+        // Wait for pipeline completion or expiration timer
+        let result = if let Some(refresh_duration) = refresh_after {
+            tokio::select! {
+                res = pipeline_handle => res,
+                _ = tokio::time::sleep(refresh_duration) => {
+                    return PipelineResult::Expired;
+                }
+            }
+        } else {
+            pipeline_handle.await
+        };
 
         match result {
             Ok(Ok(())) => {

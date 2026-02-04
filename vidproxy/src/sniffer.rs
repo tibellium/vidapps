@@ -125,6 +125,10 @@ impl DrmSniffer {
             }
         };
 
+        if let Some(ts) = outputs.expires_at {
+            println!("[sniffer] Stream expires at: {}", ts);
+        }
+
         Ok(Some(StreamInfo {
             channel_name: outputs.channel_name,
             mpd_url: outputs.mpd_url,
@@ -132,6 +136,7 @@ impl DrmSniffer {
             license_url: String::new(), // Not needed for now
             pssh: String::new(),        // Not needed for now
             thumbnail_url: outputs.thumbnail_url,
+            expires_at: outputs.expires_at,
         }))
     }
 }
