@@ -6,6 +6,9 @@ steps:
   - name: "go_home"
     kind: Navigate
     url: "https://www.canalrcn.com"
+    wait_for:
+      function: "localStorage.getItem('persist:tbx') && localStorage.getItem('persist:tbx').includes('access_token')"
+      delay: 0.5
 
   - name: "find_content"
     kind: Sniff

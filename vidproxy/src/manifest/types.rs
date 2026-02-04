@@ -49,12 +49,16 @@ pub struct Step {
 
 /// Wait condition after navigation.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum WaitCondition {
+pub struct WaitCondition {
     /// Wait for a CSS selector to appear
-    Selector(String),
+    #[serde(default)]
+    pub selector: Option<String>,
     /// Wait for a JS expression to return truthy
-    Function(String),
+    #[serde(default)]
+    pub function: Option<String>,
+    /// Additional delay in seconds after other conditions
+    #[serde(default)]
+    pub delay: Option<f64>,
 }
 
 /// The kind of step.

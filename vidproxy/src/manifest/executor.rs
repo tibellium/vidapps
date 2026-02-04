@@ -65,8 +65,6 @@ async fn execute_navigate(
     tab: &ChromeBrowserTab,
     context: &InterpolationContext,
 ) -> Result<()> {
-    use super::types::WaitCondition;
-
     let url_template = step
         .url
         .as_ref()
@@ -78,15 +76,17 @@ async fn execute_navigate(
 
     // Wait for condition if specified
     if let Some(wait_for) = &step.wait_for {
-        match wait_for {
-            WaitCondition::Selector(selector) => {
-                println!("[executor] Waiting for selector: {}", selector);
-                tab.wait_for_selector(selector).await?;
-            }
-            WaitCondition::Function(expr) => {
-                println!("[executor] Waiting for function: {}", expr);
-                tab.wait_for_function(expr).await?;
-            }
+        if let Some(selector) = &wait_for.selector {
+            println!("[executor] Waiting for selector: {}", selector);
+            tab.wait_for_selector(selector).await?;
+        }
+        if let Some(expr) = &wait_for.function {
+            println!("[executor] Waiting for function: {}", expr);
+            tab.wait_for_function(expr).await?;
+        }
+        if let Some(delay) = wait_for.delay {
+            println!("[executor] Waiting {} seconds", delay);
+            tokio::time::sleep(std::time::Duration::from_secs_f64(delay)).await;
         }
     }
 
