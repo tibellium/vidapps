@@ -41,6 +41,12 @@ pub struct Source {
     /// Optional SOCKS5 proxy URL (e.g., "socks5://127.0.0.1:1080")
     #[serde(default)]
     pub proxy: Option<String>,
+    /// ISO 3166-1 alpha-2 country code (e.g., "CO" for Colombia, "US" for United States)
+    #[serde(default)]
+    pub country: Option<String>,
+    /// ISO 639-1 language code (e.g., "es" for Spanish, "en" for English)
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 /**

@@ -237,6 +237,12 @@ async fn source_m3u(
     // Wait for source to be ready
     wait_for_source_ready(&state.registry, &source_id).await?;
 
+    let manifest = state
+        .manifest_store
+        .get(&source_id)
+        .await
+        .ok_or(StatusCode::NOT_FOUND)?;
+
     let channels = state.registry.list_by_source(&source_id);
     if channels.is_empty() {
         // Source is ready but has no channels (all failed during content phase)
@@ -265,15 +271,33 @@ async fn source_m3u(
             String::new()
         };
 
+        // Add country attribute if configured
+        let country_attr = manifest
+            .source
+            .country
+            .as_ref()
+            .map(|c| format!(" tvg-country=\"{}\"", escape_xml(c)))
+            .unwrap_or_default();
+
+        // Add language attribute if configured
+        let language_attr = manifest
+            .source
+            .language
+            .as_ref()
+            .map(|l| format!(" tvg-language=\"{}\"", escape_xml(l)))
+            .unwrap_or_default();
+
         let channel_id = format!("{}:{}", source_id, entry.channel.id);
 
         playlist.push_str(&format!(
-            "#EXTINF:-1 tvg-id=\"{id}\" tvg-name=\"{name}\" tvg-type=\"live\" group-title=\"{group}\"{logo},{name}\n\
+            "#EXTINF:-1 tvg-id=\"{id}\" tvg-name=\"{name}\" tvg-type=\"live\" group-title=\"{group}\"{logo}{country}{language},{name}\n\
              {base_url}/{source}/{channel}/playlist.m3u8\n",
             id = escape_xml(&channel_id),
             name = escape_xml(channel_name),
-            group = escape_xml(&source_id),
+            group = escape_xml(&manifest.source.name),
             logo = logo_attr,
+            country = country_attr,
+            language = language_attr,
             base_url = base_url,
             source = source_id,
             channel = entry.channel.id,
@@ -294,6 +318,12 @@ async fn source_epg(
     // Wait for source to be ready
     wait_for_source_ready(&state.registry, &source_id).await?;
 
+    let manifest = state
+        .manifest_store
+        .get(&source_id)
+        .await
+        .ok_or(StatusCode::NOT_FOUND)?;
+
     let channels = state.registry.list_by_source(&source_id);
     if channels.is_empty() {
         return Err(StatusCode::NOT_FOUND);
@@ -307,6 +337,14 @@ async fn source_epg(
 
     let mut channel_elements = String::new();
     let mut programmes = String::new();
+
+    // Language attribute for titles/descriptions if configured
+    let lang_attr = manifest
+        .source
+        .language
+        .as_ref()
+        .map(|l| format!(" lang=\"{}\"", escape_xml(l)))
+        .unwrap_or_default();
 
     for entry in &channels {
         if entry.stream_info.is_none() {
@@ -328,11 +366,12 @@ async fn source_epg(
 
         channel_elements.push_str(&format!(
             "  <channel id=\"{id}\">\n\
-             \x20   <display-name>{name}</display-name>\n\
+             \x20   <display-name{lang}>{name}</display-name>\n\
              {icon}\
              \x20 </channel>\n",
             id = escape_xml(&channel_id),
             name = escape_xml(channel_name),
+            lang = lang_attr,
             icon = icon_element,
         ));
 
@@ -343,13 +382,14 @@ async fn source_epg(
 
             programmes.push_str(&format!(
                 "  <programme start=\"{start}\" stop=\"{stop}\" channel=\"{id}\">\n\
-                 \x20   <title>{name}</title>\n\
-                 \x20   <desc>Live broadcast</desc>\n\
+                 \x20   <title{lang}>{name}</title>\n\
+                 \x20   <desc{lang}>Live broadcast</desc>\n\
                  \x20 </programme>\n",
                 start = day_start.format("%Y%m%d%H%M%S %z"),
                 stop = day_end.format("%Y%m%d%H%M%S %z"),
                 id = escape_xml(&channel_id),
                 name = escape_xml(channel_name),
+                lang = lang_attr,
             ));
         }
     }
