@@ -104,6 +104,9 @@ pub struct Source {
     /// ISO 639-1 language code (e.g., "es" for Spanish, "en" for English)
     #[serde(default)]
     pub language: Option<String>,
+    /// Run browser in headless mode for this source
+    #[serde(default)]
+    pub headless: bool,
 }
 
 /**

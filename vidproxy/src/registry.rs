@@ -26,6 +26,27 @@ impl SourceState {
 }
 
 /**
+    State of a channel's content resolution process.
+*/
+#[derive(Debug, Clone)]
+pub enum ChannelContentState {
+    /// Content phase not yet run
+    Pending,
+    /// Content phase in progress
+    Resolving,
+    /// Content phase completed successfully
+    Resolved,
+    /// Content phase failed
+    Failed(String),
+}
+
+impl ChannelContentState {
+    pub fn is_resolving(&self) -> bool {
+        matches!(self, ChannelContentState::Resolving)
+    }
+}
+
+/**
     Full channel ID combining source and channel ID.
 */
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -71,6 +92,10 @@ pub struct ChannelRegistry {
     source_state: RwLock<HashMap<String, SourceState>>,
     /// Notification handles for waiters on each source
     source_notify: RwLock<HashMap<String, Arc<Notify>>>,
+    /// Per-channel content resolution state
+    channel_content_state: RwLock<HashMap<ChannelId, ChannelContentState>>,
+    /// Notification handles for waiters on channel content resolution
+    channel_content_notify: RwLock<HashMap<ChannelId, Arc<Notify>>>,
 }
 
 impl ChannelRegistry {
@@ -80,6 +105,8 @@ impl ChannelRegistry {
             discovery_expiration: RwLock::new(HashMap::new()),
             source_state: RwLock::new(HashMap::new()),
             source_notify: RwLock::new(HashMap::new()),
+            channel_content_state: RwLock::new(HashMap::new()),
+            channel_content_notify: RwLock::new(HashMap::new()),
         }
     }
 
@@ -322,6 +349,127 @@ impl ChannelRegistry {
     #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.channels.read().unwrap().is_empty()
+    }
+
+    // ===== Channel Content Resolution State =====
+
+    /**
+        Get the content resolution state for a channel.
+        Returns Pending if no state has been set.
+    */
+    pub fn get_channel_content_state(&self, id: &ChannelId) -> ChannelContentState {
+        self.channel_content_state
+            .read()
+            .unwrap()
+            .get(id)
+            .cloned()
+            .unwrap_or(ChannelContentState::Pending)
+    }
+
+    /**
+        Mark a channel as having content resolution in progress.
+        Creates a notify handle for waiters.
+    */
+    pub fn mark_channel_resolving(&self, id: &ChannelId) {
+        {
+            let mut states = self.channel_content_state.write().unwrap();
+            states.insert(id.clone(), ChannelContentState::Resolving);
+        }
+
+        // Create notify handle if it doesn't exist
+        let mut notifies = self.channel_content_notify.write().unwrap();
+        notifies
+            .entry(id.clone())
+            .or_insert_with(|| Arc::new(Notify::new()));
+    }
+
+    /**
+        Mark a channel's content as successfully resolved.
+        Notifies any waiters.
+    */
+    pub fn mark_channel_resolved(&self, id: &ChannelId) {
+        {
+            let mut states = self.channel_content_state.write().unwrap();
+            states.insert(id.clone(), ChannelContentState::Resolved);
+        }
+
+        // Notify any waiters
+        let notifies = self.channel_content_notify.read().unwrap();
+        if let Some(notify) = notifies.get(id) {
+            notify.notify_waiters();
+        }
+    }
+
+    /**
+        Mark a channel's content resolution as failed.
+        Notifies any waiters.
+    */
+    pub fn mark_channel_failed(&self, id: &ChannelId, error: &str) {
+        {
+            let mut states = self.channel_content_state.write().unwrap();
+            states.insert(id.clone(), ChannelContentState::Failed(error.to_string()));
+        }
+
+        // Notify any waiters
+        let notifies = self.channel_content_notify.read().unwrap();
+        if let Some(notify) = notifies.get(id) {
+            notify.notify_waiters();
+        }
+    }
+
+    /**
+        Reset a channel's content state back to Pending.
+        Used when stream_info expires and needs to be re-resolved.
+    */
+    pub fn reset_channel_content_state(&self, id: &ChannelId) {
+        let mut states = self.channel_content_state.write().unwrap();
+        states.insert(id.clone(), ChannelContentState::Pending);
+    }
+
+    /**
+        Wait for a channel's content to be resolved (with timeout).
+        Returns the final state (Resolved or Failed), or None if timeout.
+    */
+    pub async fn wait_for_channel_content(
+        &self,
+        id: &ChannelId,
+        timeout: Duration,
+    ) -> Option<ChannelContentState> {
+        // Check current state first
+        let current_state = self.get_channel_content_state(id);
+        if !current_state.is_resolving() {
+            return Some(current_state);
+        }
+
+        // Get the notify handle
+        let notify = {
+            let notifies = self.channel_content_notify.read().unwrap();
+            notifies.get(id).cloned()
+        };
+
+        let Some(notify) = notify else {
+            return Some(current_state);
+        };
+
+        // Wait with timeout
+        let result = tokio::time::timeout(timeout, async {
+            loop {
+                notify.notified().await;
+                let state = self.get_channel_content_state(id);
+                if !state.is_resolving() {
+                    return state;
+                }
+            }
+        })
+        .await;
+
+        match result {
+            Ok(state) => Some(state),
+            Err(_timeout) => {
+                // Return current state on timeout (might still be Resolving)
+                Some(self.get_channel_content_state(id))
+            }
+        }
     }
 }
 

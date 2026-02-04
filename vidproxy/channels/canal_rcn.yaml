@@ -1,9 +1,10 @@
 source:
   id: "canal_rcn"
   name: "Canal RCN"
-  proxy: "socks5://127.0.0.1:1080"
   country: "CO"
   language: "es"
+  headless: true
+  proxy: "socks5://127.0.0.1:1080"
 
 # Discovery phase: navigate to site and extract all available channels
 

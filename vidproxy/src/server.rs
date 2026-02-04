@@ -18,13 +18,18 @@ use tokio_util::io::ReaderStream;
 use crate::image_cache::ImageCache;
 use crate::manifest::Manifest;
 use crate::pipeline::PipelineStore;
-use crate::registry::{ChannelId, ChannelRegistry, SourceState};
+use crate::registry::{ChannelContentState, ChannelId, ChannelRegistry, SourceState};
 use crate::source;
 
 /**
     Default timeout for waiting on source discovery (60 seconds)
 */
 const SOURCE_WAIT_TIMEOUT: StdDuration = StdDuration::from_secs(60);
+
+/**
+    Default timeout for waiting on channel content resolution (120 seconds)
+*/
+const CONTENT_WAIT_TIMEOUT: StdDuration = StdDuration::from_secs(120);
 
 /**
     Wait for a source to be ready, returning appropriate error if not.
@@ -81,18 +86,18 @@ fn get_base_url(headers: &HeaderMap) -> String {
 }
 
 /**
-    Store for loaded manifests, keyed by source name
+    Store for loaded manifests and their associated browsers, keyed by source name
 */
 pub struct ManifestStore {
     manifests: RwLock<HashMap<String, Manifest>>,
-    headless: bool,
+    browsers: RwLock<HashMap<String, chrome_browser::ChromeBrowser>>,
 }
 
 impl ManifestStore {
-    pub fn new(headless: bool) -> Self {
+    pub fn new() -> Self {
         Self {
             manifests: RwLock::new(HashMap::new()),
-            headless,
+            browsers: RwLock::new(HashMap::new()),
         }
     }
 
@@ -109,8 +114,25 @@ impl ManifestStore {
         self.manifests.read().await.values().cloned().collect()
     }
 
-    pub fn headless(&self) -> bool {
-        self.headless
+    /// Store a browser instance for a source
+    pub async fn set_browser(&self, source: &str, browser: chrome_browser::ChromeBrowser) {
+        let mut browsers = self.browsers.write().await;
+        browsers.insert(source.to_string(), browser);
+    }
+
+    /// Get the browser instance for a source (cloning is cheap - it's Arc-based)
+    pub async fn get_browser(&self, source: &str) -> Option<chrome_browser::ChromeBrowser> {
+        self.browsers.read().await.get(source).cloned()
+    }
+
+    /// Get tab 0 from the browser for a source
+    pub async fn get_browser_tab(&self, source: &str) -> Option<chrome_browser::ChromeBrowserTab> {
+        let browsers = self.browsers.read().await;
+        if let Some(browser) = browsers.get(source) {
+            browser.get_tab(0).await
+        } else {
+            None
+        }
     }
 }
 
@@ -194,7 +216,6 @@ async fn source_info(
     let channels = state.registry.list_by_source(&source_id);
     let channel_list: Vec<serde_json::Value> = channels
         .iter()
-        .filter(|e| e.stream_info.is_some())
         .map(|e| {
             serde_json::json!({
                 "id": e.channel.id,
@@ -206,6 +227,7 @@ async fn source_info(
                     None
                 },
                 "playlist": format!("{}/{}/{}/playlist.m3u8", base_url, source_id, e.channel.id),
+                "resolved": e.stream_info.is_some(),
             })
         })
         .collect();
@@ -254,11 +276,7 @@ async fn source_m3u(
     let mut playlist = format!("#EXTM3U url-tvg=\"{}/{}/epg.xml\"\n", base_url, source_id);
 
     for entry in &channels {
-        // Skip channels without stream info
-        if entry.stream_info.is_none() {
-            continue;
-        }
-
+        // Include all channels - content will be resolved on-demand when played
         let channel_name = entry.channel.name.as_deref().unwrap_or(&entry.channel.id);
 
         // Use local image URL if channel has an image
@@ -354,9 +372,7 @@ async fn source_epg(
         .unwrap_or_default();
 
     for entry in &channels {
-        if entry.stream_info.is_none() {
-            continue;
-        }
+        // Include all channels - EPG data comes from metadata phase, not content phase
 
         let channel_name = entry.channel.name.as_deref().unwrap_or(&entry.channel.id);
         let channel_id = format!("{}:{}", source_id, entry.channel.id);
@@ -509,6 +525,138 @@ async fn source_epg(
 }
 
 /**
+    Resolve content (stream info) for a channel on-demand.
+
+    This handles concurrency by tracking resolution state:
+    - If no resolution is in progress, starts one
+    - If another request is already resolving, waits for it to complete
+*/
+async fn resolve_channel_content(
+    state: &AppState,
+    id: &ChannelId,
+    source_id: &str,
+) -> Result<crate::manifest::StreamInfo, StatusCode> {
+    // Check current content resolution state
+    match state.registry.get_channel_content_state(id) {
+        ChannelContentState::Resolving => {
+            // Another request is already resolving - wait for it
+            println!(
+                "[server] Waiting for content resolution of {}...",
+                id.to_string()
+            );
+
+            match state
+                .registry
+                .wait_for_channel_content(id, CONTENT_WAIT_TIMEOUT)
+                .await
+            {
+                Some(ChannelContentState::Resolved) => {
+                    // Content was resolved - get updated entry
+                    let entry = state.registry.get(id).ok_or(StatusCode::NOT_FOUND)?;
+                    entry.stream_info.ok_or_else(|| {
+                        eprintln!(
+                            "[server] Content resolved but stream_info still None for {}",
+                            id.to_string()
+                        );
+                        StatusCode::SERVICE_UNAVAILABLE
+                    })
+                }
+                Some(ChannelContentState::Failed(err)) => {
+                    eprintln!(
+                        "[server] Content resolution failed for {}: {}",
+                        id.to_string(),
+                        err
+                    );
+                    Err(StatusCode::SERVICE_UNAVAILABLE)
+                }
+                _ => {
+                    eprintln!(
+                        "[server] Timeout waiting for content resolution of {}",
+                        id.to_string()
+                    );
+                    Err(StatusCode::GATEWAY_TIMEOUT)
+                }
+            }
+        }
+        ChannelContentState::Pending | ChannelContentState::Failed(_) => {
+            // We need to resolve it
+            println!(
+                "[server] Resolving content on-demand for {}...",
+                id.to_string()
+            );
+
+            // Mark as resolving to prevent duplicate work
+            state.registry.mark_channel_resolving(id);
+
+            // Get manifest for this source
+            let manifest = state.manifest_store.get(source_id).await.ok_or_else(|| {
+                eprintln!("[server] No manifest found for source '{}'", source_id);
+                state.registry.mark_channel_failed(id, "No manifest found");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+            // Get browser tab for this source
+            let tab = state
+                .manifest_store
+                .get_browser_tab(source_id)
+                .await
+                .ok_or_else(|| {
+                    eprintln!("[server] No browser found for source '{}'", source_id);
+                    state
+                        .registry
+                        .mark_channel_failed(id, "No browser available");
+                    StatusCode::SERVICE_UNAVAILABLE
+                })?;
+
+            // Get channel data from registry
+            let entry = state.registry.get(id).ok_or_else(|| {
+                state.registry.mark_channel_failed(id, "Channel not found");
+                StatusCode::NOT_FOUND
+            })?;
+
+            // Run content phase for this channel using the existing browser
+            match source::resolve_channel_content(&manifest, &entry.channel, &tab).await {
+                Ok(stream_info) => {
+                    println!(
+                        "[server] Content resolved for {}: {}",
+                        id.to_string(),
+                        stream_info.manifest_url
+                    );
+
+                    // Update registry
+                    state.registry.update_stream_info(id, stream_info.clone());
+                    state.registry.mark_channel_resolved(id);
+
+                    // Update pipeline if it exists (for refresh case)
+                    if let Some(pipeline) = state.pipeline_store.get(id).await {
+                        pipeline.update_stream_info(stream_info.clone()).await;
+                        pipeline.stop().await;
+                    }
+
+                    Ok(stream_info)
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[server] Failed to resolve content for {}: {}",
+                        id.to_string(),
+                        e
+                    );
+                    state.registry.set_error(id, e.to_string());
+                    state.registry.mark_channel_failed(id, &e.to_string());
+                    Err(StatusCode::SERVICE_UNAVAILABLE)
+                }
+            }
+        }
+        ChannelContentState::Resolved => {
+            // Content was already resolved - this shouldn't normally happen
+            // since we check stream_info first, but handle it anyway
+            let entry = state.registry.get(id).ok_or(StatusCode::NOT_FOUND)?;
+            entry.stream_info.ok_or(StatusCode::SERVICE_UNAVAILABLE)
+        }
+    }
+}
+
+/**
     Serve the HLS playlist for a channel, starting the pipeline if needed.
 */
 async fn stream_playlist(
@@ -520,15 +668,17 @@ async fn stream_playlist(
 
     let id = ChannelId::new(&source_id, &channel_id);
 
-    // Check if discovery has expired for this source - if so, re-run entire source
+    // Check if discovery has expired for this source - if so, re-run discovery only
     if state.registry.is_discovery_expired(&source_id) {
         println!(
-            "[server] Discovery expired for source '{}', refreshing entire source...",
+            "[server] Discovery expired for source '{}', refreshing...",
             source_id
         );
 
-        if let Some(manifest) = state.manifest_store.get(&source_id).await {
-            match source::run_source(&manifest, state.manifest_store.headless()).await {
+        if let Some(manifest) = state.manifest_store.get(&source_id).await
+            && let Some(browser) = state.manifest_store.get_browser(&source_id).await
+        {
+            match source::run_source_discovery_only(&manifest, &browser).await {
                 Ok(result) => {
                     state.registry.register_source(
                         &result.source_id,
@@ -555,69 +705,33 @@ async fn stream_playlist(
         false
     };
 
-    // Check if stream info is expired and needs refresh
-    let stream_info = if state.registry.is_stream_expired(&id) || pipeline_needs_refresh {
-        if pipeline_needs_refresh {
-            println!(
-                "[server] Pipeline auth error for {}, refreshing...",
-                id.to_string()
-            );
-        } else {
-            println!(
-                "[server] Stream info expired for {}, refreshing...",
-                id.to_string()
-            );
-        }
-
-        // Get manifest for this source
-        let manifest = state.manifest_store.get(&source_id).await.ok_or_else(|| {
-            eprintln!("[server] No manifest found for source '{}'", source_id);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-        // Refresh the channel
-        match source::refresh_channel(&manifest, &channel_id, state.manifest_store.headless()).await
-        {
-            Ok(new_stream_info) => {
-                println!("[server] Refreshed stream info for {}", id.to_string());
-
-                // Update registry
-                state
-                    .registry
-                    .update_stream_info(&id, new_stream_info.clone());
-
-                // Update pipeline if it exists
-                if let Some(pipeline) = state.pipeline_store.get(&id).await {
-                    pipeline.update_stream_info(new_stream_info.clone()).await;
-                    // Stop the pipeline so it restarts with new stream info
-                    pipeline.stop().await;
-                }
-
-                new_stream_info
-            }
-            Err(e) => {
-                eprintln!(
-                    "[server] Failed to refresh channel {}: {}",
-                    id.to_string(),
-                    e
+    // Resolve stream info - either from cache, on-demand, or refresh
+    let stream_info = if let Some(ref existing) = entry.stream_info {
+        // Stream info exists - check if it needs refresh
+        if state.registry.is_stream_expired(&id) || pipeline_needs_refresh {
+            if pipeline_needs_refresh {
+                println!(
+                    "[server] Pipeline auth error for {}, refreshing...",
+                    id.to_string()
                 );
-                state.registry.set_error(&id, e.to_string());
-
-                // Try to use existing stream info if available
-                entry.stream_info.clone().ok_or_else(|| {
-                    eprintln!("[server] No existing stream info available");
-                    StatusCode::SERVICE_UNAVAILABLE
-                })?
+            } else {
+                println!(
+                    "[server] Stream info expired for {}, refreshing...",
+                    id.to_string()
+                );
             }
+
+            // Reset content state so we can re-resolve
+            state.registry.reset_channel_content_state(&id);
+
+            resolve_channel_content(&state, &id, &source_id).await?
+        } else {
+            // Use existing valid stream info
+            existing.clone()
         }
     } else {
-        // Use existing stream info
-        entry.stream_info.clone().ok_or_else(|| {
-            if let Some(ref err) = entry.last_error {
-                eprintln!("[server] Channel {} has error: {}", id.to_string(), err);
-            }
-            StatusCode::SERVICE_UNAVAILABLE
-        })?
+        // No stream info - resolve on-demand
+        resolve_channel_content(&state, &id, &source_id).await?
     };
 
     // Get or create pipeline for this channel

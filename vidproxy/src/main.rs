@@ -29,10 +29,6 @@ struct Args {
     #[arg(long)]
     list_sources: bool,
 
-    /// Run Chrome in headless mode
-    #[arg(long)]
-    headless: bool,
-
     /// HTTP server port
     #[arg(short, long, default_value = "8098")]
     port: u16,
@@ -88,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pipeline_store = Arc::new(PipelineStore::new(pipeline_config, shutdown_rx.clone()));
 
     // Create manifest store for refresh operations
-    let manifest_store = Arc::new(ManifestStore::new(args.headless));
+    let manifest_store = Arc::new(ManifestStore::new());
 
     // Create image cache for on-demand image fetching
     let image_cache = Arc::new(ImageCache::new());
@@ -139,31 +135,53 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Spawn discovery tasks in background
-    let headless = args.headless;
     for manifest in manifests {
         let registry = Arc::clone(&registry);
+        let manifest_store = Arc::clone(&manifest_store);
         tokio::spawn(async move {
             println!(
                 "[discovery] Starting source: {} ({})",
                 manifest.source.name, manifest.source.id
             );
 
-            match source::run_source(&manifest, headless).await {
+            // Create browser for this source
+            let browser = match source::create_browser(&manifest).await {
+                Ok(b) => b,
+                Err(e) => {
+                    eprintln!(
+                        "[discovery] Failed to create browser for '{}': {}",
+                        manifest.source.id, e
+                    );
+                    registry.mark_source_failed(&manifest.source.id, e.to_string());
+                    return;
+                }
+            };
+
+            // Run discovery with the browser
+            match source::run_source_discovery_only(&manifest, &browser).await {
                 Ok(result) => {
                     let channel_count = result.channels.len();
+
+                    // Store browser for later content resolution
+                    manifest_store
+                        .set_browser(&manifest.source.id, browser)
+                        .await;
+
                     registry.register_source(
                         &result.source_id,
                         result.channels,
                         result.discovery_expires_at,
                     );
                     println!(
-                        "[discovery] Source '{}' ready: {} channels",
+                        "[discovery] Source '{}' ready: {} channels (content on-demand)",
                         manifest.source.id, channel_count
                     );
                 }
                 Err(e) => {
                     eprintln!("[discovery] Source '{}' failed: {}", manifest.source.id, e);
                     registry.mark_source_failed(&manifest.source.id, e.to_string());
+                    // Close browser on failure
+                    let _ = browser.close().await;
                 }
             }
         });
