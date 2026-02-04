@@ -46,8 +46,15 @@ process:
       - "Noticias RCN"
       - "Deportes RCN"
       - "Señal Principal"
-      - "Habitaciónes"
+      - "Baños"
+      - "Beauty"
+      - "Comedor"
+      - "Habitación Calma"
+      - "Habitación Tormenta"
+      - "Multiview"
+      - "Sala"
   transforms:
+    # RCN renames
     - kind: Rename
       name: "RCN Señal en Vivo"
       to: "RCN - Señal Principal"
@@ -58,13 +65,33 @@ process:
       name: "Deportes RCN"
       to: "RCN - Deportes"
 
+    # LCDLF renames
     - kind: Rename
       name: "Señal Principal"
       to: "LCDLF - Señal Principal"
     - kind: Rename
-      name: "Habitaciónes"
-      to: "LCDLF - Habitaciónes"
+      name: "Baños"
+      to: "LCDLF - Baños"
+    - kind: Rename
+      name: "Beauty"
+      to: "LCDLF - Beauty"
+    - kind: Rename
+      name: "Comedor"
+      to: "LCDLF - Comedor"
+    - kind: Rename
+      name: "Habitación Calma"
+      to: "LCDLF - Habitación Calma"
+    - kind: Rename
+      name: "Habitación Tormenta"
+      to: "LCDLF - Habitación Tormenta"
+    - kind: Rename
+      name: "Multiview"
+      to: "LCDLF - Multiview"
+    - kind: Rename
+      name: "Sala"
+      to: "LCDLF - Sala"
 
+    # RCN categories
     - kind: AddCategory
       name: "RCN - Señal Principal"
       category: "RCN"
@@ -75,18 +102,56 @@ process:
       name: "RCN - Deportes"
       category: "RCN"
 
+    # LCDLF categories
     - kind: AddCategory
       name: "LCDLF - Señal Principal"
       category: "LCDLF"
     - kind: AddCategory
-      name: "LCDLF - Habitaciónes"
+      name: "LCDLF - Baños"
+      category: "LCDLF"
+    - kind: AddCategory
+      name: "LCDLF - Beauty"
+      category: "LCDLF"
+    - kind: AddCategory
+      name: "LCDLF - Comedor"
+      category: "LCDLF"
+    - kind: AddCategory
+      name: "LCDLF - Habitación Calma"
+      category: "LCDLF"
+    - kind: AddCategory
+      name: "LCDLF - Habitación Tormenta"
+      category: "LCDLF"
+    - kind: AddCategory
+      name: "LCDLF - Multiview"
+      category: "LCDLF"
+    - kind: AddCategory
+      name: "LCDLF - Sala"
       category: "LCDLF"
 
+    # LCDLF descriptions
     - kind: AddDescription
       name: "LCDLF - Señal Principal"
       description: "Transmisión en vivo 24/7"
     - kind: AddDescription
-      name: "LCDLF - Habitaciónes"
+      name: "LCDLF - Baños"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "LCDLF - Beauty"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "LCDLF - Comedor"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "LCDLF - Habitación Calma"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "LCDLF - Habitación Tormenta"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "LCDLF - Multiview"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "LCDLF - Sala"
       description: "Transmisión en vivo 24/7"
 
 # Metadata phase: extract EPG data for all channels
