@@ -86,6 +86,10 @@ impl ManifestStore {
         self.manifests.read().await.get(source).cloned()
     }
 
+    pub async fn list(&self) -> Vec<Manifest> {
+        self.manifests.read().await.values().cloned().collect()
+    }
+
     pub fn headless(&self) -> bool {
         self.headless
     }
@@ -97,6 +101,116 @@ struct AppState {
     pipeline_store: Arc<PipelineStore>,
     manifest_store: Arc<ManifestStore>,
     image_cache: Arc<ImageCache>,
+}
+
+/**
+    Root endpoint - list all available sources with links.
+*/
+async fn index(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    let host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost:8080");
+
+    let manifests = state.manifest_store.list().await;
+
+    let sources: Vec<serde_json::Value> = manifests
+        .iter()
+        .map(|m| {
+            let source_state = state.registry.get_source_state(&m.source.id);
+            let status = match source_state {
+                Some(SourceState::Ready) => "ready",
+                Some(SourceState::Loading) => "loading",
+                Some(SourceState::Failed(_)) => "failed",
+                None => "unknown",
+            };
+
+            serde_json::json!({
+                "id": m.source.id,
+                "name": m.source.name,
+                "status": status,
+                "info": format!("http://{}/{}/info", host, m.source.id),
+                "channels": format!("http://{}/{}/channels.m3u", host, m.source.id),
+                "epg": format!("http://{}/{}/epg.xml", host, m.source.id),
+            })
+        })
+        .collect();
+
+    let json = serde_json::json!({
+        "sources": sources,
+    });
+
+    (
+        [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
+        json.to_string(),
+    )
+}
+
+/**
+    Get source info (JSON).
+*/
+async fn source_info(
+    State(state): State<AppState>,
+    Path(source_id): Path<String>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, StatusCode> {
+    let manifest = state
+        .manifest_store
+        .get(&source_id)
+        .await
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost:8080");
+
+    let source_state = state.registry.get_source_state(&source_id);
+    let status = match &source_state {
+        Some(SourceState::Ready) => "ready",
+        Some(SourceState::Loading) => "loading",
+        Some(SourceState::Failed(_)) => "failed",
+        None => "unknown",
+    };
+
+    let error = match &source_state {
+        Some(SourceState::Failed(err)) => Some(err.clone()),
+        _ => None,
+    };
+
+    let channels = state.registry.list_by_source(&source_id);
+    let channel_list: Vec<serde_json::Value> = channels
+        .iter()
+        .filter(|e| e.stream_info.is_some())
+        .map(|e| {
+            serde_json::json!({
+                "id": e.channel.id,
+                "name": e.channel.name,
+                "info": format!("http://{}/{}/{}/info", host, source_id, e.channel.id),
+                "image": if e.channel.image.is_some() {
+                    Some(format!("http://{}/{}/{}/image", host, source_id, e.channel.id))
+                } else {
+                    None
+                },
+                "playlist": format!("http://{}/{}/{}/playlist.m3u8", host, source_id, e.channel.id),
+            })
+        })
+        .collect();
+
+    let json = serde_json::json!({
+        "id": manifest.source.id,
+        "name": manifest.source.name,
+        "status": status,
+        "error": error,
+        "channels_m3u": format!("http://{}/{}/channels.m3u", host, source_id),
+        "epg_xml": format!("http://{}/{}/epg.xml", host, source_id),
+        "channels": channel_list,
+    });
+
+    Ok((
+        [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
+        json.to_string(),
+    ))
 }
 
 /**
@@ -453,7 +567,7 @@ async fn channel_info(
     });
 
     Ok((
-        [(header::CONTENT_TYPE, "application/json")],
+        [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
         json.to_string(),
     ))
 }
@@ -554,6 +668,8 @@ pub async fn run_server(
     };
 
     let app = Router::new()
+        .route("/", get(index))
+        .route("/{source_id}/info", get(source_info))
         .route("/{source_id}/channels.m3u", get(channels_m3u))
         .route("/{source_id}/epg.xml", get(epg_xml))
         .route("/{source_id}/{channel_id}/info", get(channel_info))
