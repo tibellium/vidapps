@@ -39,37 +39,35 @@ discovery:
 
 filter:
   name:
+    - "RCN Señal en Vivo"
     - "Señal Principal"
 
 # Content phase: for each channel, navigate to player and extract stream info
 
 content:
   outputs:
-    manifest_url: "${{get_manifest.mpd_url}}"
-    license_url: "${{get_license.license_url}}"
-    expires_at: "${{get_manifest.expires_at}}"
+    manifest_url: "${{get_content.mpd_url}}"
+    license_url: "${{get_content.license_url}}"
+    expires_at: "${{get_content.expires_at}}"
 
   steps:
     - name: "go_to_player"
       kind: Navigate
       url: "https://www.canalrcn.com/co/player/${{channel.id}}"
 
-    - name: "get_manifest"
+    - name: "get_content"
       kind: Sniff
       request:
-        url: "\\.mpd"
+        url: "unity\\.tbxapis\\.com/v0/contents/.*/url"
+        method: GET
       extract:
         mpd_url:
-          kind: url
-        expires_at:
-          kind: urlregex
-          path: "expires=(\\d+)"
-
-    - name: "get_license"
-      kind: Sniff
-      request:
-        url: "license.*widevine"
-        method: POST
-      extract:
+          kind: jsonpath
+          path: "$.entitlements[?(@.contentType=='application/dash+xml')].url"
         license_url:
-          kind: url
+          kind: jsonpath
+          path: "$.entitlements[?(@.drm.widevine)].drm.widevine.licenseAcquisitionUrl"
+        expires_at:
+          kind: jsonpath_regex
+          path: "$.entitlements[?(@.contentType=='application/dash+xml')].url"
+          regex: "expires=(\\d+)"

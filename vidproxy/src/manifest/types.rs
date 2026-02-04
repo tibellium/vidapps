@@ -180,6 +180,9 @@ pub struct Extractor {
     /// Path/pattern for the extractor (JSONPath, XPath, regex, etc.)
     #[serde(default)]
     pub path: Option<String>,
+    /// For jsonpath_regex: regex pattern to apply after JSONPath extraction
+    #[serde(default)]
+    pub regex: Option<String>,
     /// For jsonpath_array: sub-extractors to apply to each array element
     #[serde(default)]
     pub each: Option<HashMap<String, String>>,
@@ -200,6 +203,9 @@ pub enum ExtractorKind {
     /// JSONPath query returning array of objects with sub-extractors
     #[serde(rename = "jsonpath_array")]
     JsonPathArray,
+    /// JSONPath query followed by regex extraction on the result
+    #[serde(rename = "jsonpath_regex")]
+    JsonPathRegex,
     /// XPath query on XML response body
     XPath,
     /// Regex with capture group on response body
@@ -213,6 +219,7 @@ pub enum ExtractorKind {
 /**
     A discovered channel from the discovery phase.
 */
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct DiscoveredChannel {
     pub id: String,

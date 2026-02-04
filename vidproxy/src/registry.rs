@@ -234,6 +234,7 @@ impl ChannelRegistry {
     /**
         List all channels.
     */
+    #[allow(dead_code)]
     pub fn list_all(&self) -> Vec<(ChannelId, ChannelEntry)> {
         self.channels
             .read()
@@ -318,6 +319,7 @@ impl ChannelRegistry {
     /**
         Get total channel count.
     */
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.channels.read().unwrap().len()
     }

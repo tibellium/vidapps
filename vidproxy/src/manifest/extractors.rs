@@ -22,6 +22,7 @@ pub fn extract(extractor: &Extractor, content: &str, url: &str) -> Result<String
         ExtractorKind::JsonPathArray => {
             Err(anyhow!("Use extract_array() for jsonpath_array extractors"))
         }
+        ExtractorKind::JsonPathRegex => extract_jsonpath_regex(extractor, content),
         ExtractorKind::XPath => extract_xpath(extractor, content),
         ExtractorKind::Regex => extract_regex(extractor, content),
         ExtractorKind::Line => extract_line(content),
@@ -167,6 +168,60 @@ fn extract_jsonpath(extractor: &Extractor, content: &str) -> Result<String> {
 }
 
 /**
+    Extract using JSONPath followed by regex on the result.
+*/
+fn extract_jsonpath_regex(extractor: &Extractor, content: &str) -> Result<String> {
+    use jsonpath_rust::JsonPath;
+    use std::str::FromStr;
+
+    let path = extractor
+        .path
+        .as_ref()
+        .ok_or_else(|| anyhow!("JSONPath regex extractor requires 'path'"))?;
+
+    let regex_pattern = extractor
+        .regex
+        .as_ref()
+        .ok_or_else(|| anyhow!("JSONPath regex extractor requires 'regex'"))?;
+
+    let json: serde_json::Value =
+        serde_json::from_str(content).map_err(|e| anyhow!("Failed to parse JSON: {}", e))?;
+
+    let jsonpath =
+        JsonPath::from_str(path).map_err(|e| anyhow!("Invalid JSONPath '{}': {}", path, e))?;
+
+    let results = jsonpath.find_slice(&json);
+
+    if results.is_empty() {
+        return Err(anyhow!("JSONPath '{}' returned no results", path));
+    }
+
+    // Get the first result as a string
+    let value = match results[0].clone().to_data() {
+        serde_json::Value::String(s) => s,
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::Bool(b) => b.to_string(),
+        serde_json::Value::Null => return Err(anyhow!("JSONPath '{}' returned null", path)),
+        other => other.to_string(),
+    };
+
+    // Apply regex to the extracted value
+    let re = Regex::new(regex_pattern)
+        .map_err(|e| anyhow!("Invalid regex '{}': {}", regex_pattern, e))?;
+
+    let captures = re
+        .captures(&value)
+        .ok_or_else(|| anyhow!("Regex '{}' did not match value '{}'", regex_pattern, value))?;
+
+    // Return first capture group, or whole match if no groups
+    if captures.len() > 1 {
+        Ok(captures.get(1).unwrap().as_str().to_string())
+    } else {
+        Ok(captures.get(0).unwrap().as_str().to_string())
+    }
+}
+
+/**
     Extract using XPath.
 */
 fn extract_xpath(extractor: &Extractor, content: &str) -> Result<String> {
@@ -272,6 +327,7 @@ mod tests {
         let extractor = Extractor {
             kind: ExtractorKind::Url,
             path: None,
+            regex: None,
             each: None,
         };
         let result = extract(&extractor, "body content", "https://example.com/test.mpd").unwrap();
@@ -283,6 +339,7 @@ mod tests {
         let extractor = Extractor {
             kind: ExtractorKind::Line,
             path: None,
+            regex: None,
             each: None,
         };
         let content = "some header\nabc123:def456\nmore stuff";
@@ -295,6 +352,7 @@ mod tests {
         let extractor = Extractor {
             kind: ExtractorKind::Regex,
             path: Some(r"id=(\d+)".to_string()),
+            regex: None,
             each: None,
         };
         let result = extract(&extractor, "content?id=12345&other=value", "").unwrap();
@@ -311,6 +369,7 @@ mod tests {
         let extractor = Extractor {
             kind: ExtractorKind::JsonPathArray,
             path: Some("$.items[*]".to_string()),
+            regex: None,
             each: Some(each),
         };
 
