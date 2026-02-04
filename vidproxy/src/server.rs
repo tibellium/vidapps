@@ -62,6 +62,25 @@ async fn wait_for_source_ready(
 }
 
 /**
+    Extract the base URL (scheme + host) from request headers.
+
+    Checks X-Forwarded-Proto for the scheme (used by reverse proxies like Cloudflare).
+*/
+fn get_base_url(headers: &HeaderMap) -> String {
+    let scheme = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("http");
+
+    let host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost:8080");
+
+    format!("{scheme}://{host}")
+}
+
+/**
     Store for loaded manifests, keyed by source name
 */
 pub struct ManifestStore {
@@ -107,10 +126,7 @@ struct AppState {
     Root endpoint - list all available sources with links.
 */
 async fn index(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    let host = headers
-        .get(header::HOST)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("localhost:8080");
+    let base_url = get_base_url(&headers);
 
     let manifests = state.manifest_store.list().await;
 
@@ -129,9 +145,9 @@ async fn index(State(state): State<AppState>, headers: HeaderMap) -> impl IntoRe
                 "id": m.source.id,
                 "name": m.source.name,
                 "status": status,
-                "info": format!("http://{}/{}/info", host, m.source.id),
-                "m3u": format!("http://{}/{}/channels.m3u", host, m.source.id),
-                "epg": format!("http://{}/{}/epg.xml", host, m.source.id),
+                "info": format!("{}/{}/info", base_url, m.source.id),
+                "m3u": format!("{}/{}/channels.m3u", base_url, m.source.id),
+                "epg": format!("{}/{}/epg.xml", base_url, m.source.id),
             })
         })
         .collect();
@@ -160,10 +176,7 @@ async fn source_info(
         .await
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let host = headers
-        .get(header::HOST)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("localhost:8080");
+    let base_url = get_base_url(&headers);
 
     let source_state = state.registry.get_source_state(&source_id);
     let status = match &source_state {
@@ -186,13 +199,13 @@ async fn source_info(
             serde_json::json!({
                 "id": e.channel.id,
                 "name": e.channel.name,
-                "info": format!("http://{}/{}/{}/info", host, source_id, e.channel.id),
+                "info": format!("{}/{}/{}/info", base_url, source_id, e.channel.id),
                 "image": if e.channel.image.is_some() {
-                    Some(format!("http://{}/{}/{}/image", host, source_id, e.channel.id))
+                    Some(format!("{}/{}/{}/image", base_url, source_id, e.channel.id))
                 } else {
                     None
                 },
-                "playlist": format!("http://{}/{}/{}/playlist.m3u8", host, source_id, e.channel.id),
+                "playlist": format!("{}/{}/{}/playlist.m3u8", base_url, source_id, e.channel.id),
             })
         })
         .collect();
@@ -202,8 +215,8 @@ async fn source_info(
         "name": manifest.source.name,
         "status": status,
         "error": error,
-        "m3u": format!("http://{}/{}/channels.m3u", host, source_id),
-        "epg": format!("http://{}/{}/epg.xml", host, source_id),
+        "m3u": format!("{}/{}/channels.m3u", base_url, source_id),
+        "epg": format!("{}/{}/epg.xml", base_url, source_id),
         "channels": channel_list,
     });
 
@@ -230,15 +243,9 @@ async fn source_m3u(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let host = headers
-        .get(header::HOST)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("localhost:8080");
+    let base_url = get_base_url(&headers);
 
-    let mut playlist = format!(
-        "#EXTM3U url-tvg=\"http://{}/{}/epg.xml\"\n",
-        host, source_id
-    );
+    let mut playlist = format!("#EXTM3U url-tvg=\"{}/{}/epg.xml\"\n", base_url, source_id);
 
     for entry in &channels {
         // Skip channels without stream info
@@ -251,8 +258,8 @@ async fn source_m3u(
         // Use local image URL if channel has an image
         let logo_attr = if entry.channel.image.is_some() {
             format!(
-                " tvg-logo=\"http://{}/{}/{}/image\"",
-                host, source_id, entry.channel.id
+                " tvg-logo=\"{}/{}/{}/image\"",
+                base_url, source_id, entry.channel.id
             )
         } else {
             String::new()
@@ -262,12 +269,12 @@ async fn source_m3u(
 
         playlist.push_str(&format!(
             "#EXTINF:-1 tvg-id=\"{id}\" tvg-name=\"{name}\" tvg-type=\"live\" group-title=\"{group}\"{logo},{name}\n\
-             http://{host}/{source}/{channel}/playlist.m3u8\n",
+             {base_url}/{source}/{channel}/playlist.m3u8\n",
             id = escape_xml(&channel_id),
             name = escape_xml(channel_name),
             group = escape_xml(&source_id),
             logo = logo_attr,
-            host = host,
+            base_url = base_url,
             source = source_id,
             channel = entry.channel.id,
         ));
@@ -292,10 +299,7 @@ async fn source_epg(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let host = headers
-        .get(header::HOST)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("localhost:8080");
+    let base_url = get_base_url(&headers);
 
     let now = Utc::now();
     let start_of_day = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
@@ -315,8 +319,8 @@ async fn source_epg(
         // Use local image URL if channel has an image
         let icon_element = if entry.channel.image.is_some() {
             format!(
-                "    <icon src=\"http://{}/{}/{}/image\"/>\n",
-                host, source_id, entry.channel.id
+                "    <icon src=\"{}/{}/{}/image\"/>\n",
+                base_url, source_id, entry.channel.id
             )
         } else {
             String::new()
