@@ -7,6 +7,7 @@
 /.DS_Store
 /**/.DS_Store
 
+/*.json
 /*.mpd
 /*.bin
 /*.txt

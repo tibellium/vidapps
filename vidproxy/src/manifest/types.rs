@@ -75,11 +75,14 @@ pub enum StepKind {
 /// Request matching criteria for Sniff steps.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RequestMatch {
-    /// URL glob pattern (e.g., "*unity.tbxapis.com*/items/*.json")
+    /// URL regex pattern
     pub url: String,
     /// HTTP method filter (GET, POST, etc.)
     #[serde(default)]
     pub method: Option<String>,
+    /// Timeout in seconds (default: 30)
+    #[serde(default)]
+    pub timeout: Option<f64>,
 }
 
 /// An extractor that pulls data from a response.

@@ -99,6 +99,8 @@ async fn execute_sniff(
     requests: &mut NetworkRequestStream,
     context: &mut InterpolationContext,
 ) -> Result<()> {
+    use std::time::Duration;
+
     let request_match = step
         .request
         .as_ref()
@@ -106,14 +108,39 @@ async fn execute_sniff(
 
     let url_pattern = &request_match.url;
     let method_filter = request_match.method.as_deref();
+    let timeout_secs = request_match.timeout.unwrap_or(30.0);
 
     let url_regex = Regex::new(url_pattern)
         .map_err(|e| anyhow!("Invalid URL regex '{}': {}", url_pattern, e))?;
 
-    println!("[executor] Waiting for request matching: {}", url_pattern);
+    println!(
+        "[executor] Waiting for request matching: {} (timeout: {}s)",
+        url_pattern, timeout_secs
+    );
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs_f64(timeout_secs);
 
     // Wait for matching request
-    while let Some(request) = requests.next().await {
+    loop {
+        let next_request = tokio::time::timeout_at(deadline, requests.next()).await;
+
+        let request = match next_request {
+            Ok(Some(req)) => req,
+            Ok(None) => {
+                return Err(anyhow!(
+                    "Network stream closed before finding match for step '{}'",
+                    step.name
+                ));
+            }
+            Err(_) => {
+                return Err(anyhow!(
+                    "Timeout waiting for request matching '{}' in step '{}'",
+                    url_pattern,
+                    step.name
+                ));
+            }
+        };
+
         let url = request.url().to_string();
         let method = request.method();
 
@@ -138,35 +165,34 @@ async fn execute_sniff(
             String::new()
         };
 
-        // Run extractors
-        let mut extraction_errors = Vec::new();
+        // Run extractors - all must succeed for this request to be accepted
+        let mut extracted = std::collections::HashMap::new();
+        let mut all_succeeded = true;
+
         for (output_name, extractor) in &step.extract {
             match extract(extractor, &body, &url) {
                 Ok(value) => {
-                    println!("[executor] Extracted {}.{}", step.name, output_name);
-                    context.set(&step.name, output_name, value);
+                    extracted.insert(output_name.clone(), value);
                 }
-                Err(e) => {
-                    extraction_errors.push(format!("{}: {}", output_name, e));
+                Err(_) => {
+                    all_succeeded = false;
+                    break;
                 }
             }
         }
 
-        if !extraction_errors.is_empty() {
-            return Err(anyhow!(
-                "Failed to extract from step '{}': {}",
-                step.name,
-                extraction_errors.join("; ")
-            ));
+        if all_succeeded {
+            // All extractors succeeded, commit the results
+            for (output_name, value) in extracted {
+                println!("[executor] Extracted {}.{}", step.name, output_name);
+                context.set(&step.name, &output_name, value);
+            }
+            return Ok(());
         }
 
-        return Ok(());
+        // Extraction failed, try next matching request
+        println!("[executor] Extraction failed, trying next request...");
     }
-
-    Err(anyhow!(
-        "Network stream closed before finding match for step '{}'",
-        step.name
-    ))
 }
 
 /// Execute a CdrmRequest step.

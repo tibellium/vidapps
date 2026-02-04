@@ -13,7 +13,7 @@ steps:
   - name: "find_content"
     kind: Sniff
     request:
-      url: "tbxapis\\.com.*/items/.*\\.json"
+      url: "tbxapis\\.com.*/items/[^/]+\\.json"
       method: GET
     extract:
       content_id:
