@@ -115,13 +115,12 @@ pub fn verify_service_certificate(
 /// falling back to a direct SignedDrmCertificate.
 fn try_extract_signed_certificate(data: &[u8]) -> Result<SignedDrmCertificate, CdmError> {
     // Attempt (a): parse as SignedMessage whose msg contains a SignedDrmCertificate
-    if let Ok(signed_msg) = SignedMessage::decode(data) {
-        if signed_msg.r#type == Some(MessageType::ServiceCertificate as i32) {
-            if let Some(msg) = &signed_msg.msg {
-                return SignedDrmCertificate::decode(msg.as_slice())
-                    .map_err(|e| CdmError::CertificateDecode(e.to_string()));
-            }
-        }
+    if let Ok(signed_msg) = SignedMessage::decode(data)
+        && signed_msg.r#type == Some(MessageType::ServiceCertificate as i32)
+        && let Some(msg) = &signed_msg.msg
+    {
+        return SignedDrmCertificate::decode(msg.as_slice())
+            .map_err(|e| CdmError::CertificateDecode(e.to_string()));
     }
 
     // Attempt (b): parse directly as SignedDrmCertificate

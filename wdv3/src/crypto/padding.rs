@@ -6,7 +6,7 @@ use crate::error::CdmError;
 /// All padding bytes must have the same value as the last byte.
 /// Returns the unpadded data, or CdmError::Pkcs7PaddingInvalid if the padding is malformed.
 pub fn pkcs7_unpad(data: &[u8], block_size: usize) -> Result<Vec<u8>, CdmError> {
-    if data.is_empty() || data.len() % block_size != 0 {
+    if data.is_empty() || !data.len().is_multiple_of(block_size) {
         return Err(CdmError::Pkcs7PaddingInvalid);
     }
 

@@ -18,6 +18,6 @@ prost = "0.14"
 wdv3-proto = { path = "../wdv3-proto" }
 
 data-encoding = "2"
-thiserror = "2"
-
+hex = "0.4"
 hex-literal = "1.1"
+thiserror = "2"

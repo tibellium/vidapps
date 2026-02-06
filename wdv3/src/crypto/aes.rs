@@ -93,7 +93,7 @@ pub fn aes_cbc_decrypt_key(
     iv: &[u8],
     ciphertext: &[u8],
 ) -> Result<Vec<u8>, CdmError> {
-    if iv.len() != 16 || ciphertext.is_empty() || ciphertext.len() % 16 != 0 {
+    if iv.len() != 16 || ciphertext.is_empty() || !ciphertext.len().is_multiple_of(16) {
         return Err(CdmError::AesCbcInvalidInput(
             "IV must be 16 bytes and ciphertext must be non-empty and block-aligned".into(),
         ));
@@ -127,7 +127,7 @@ pub fn aes_cbc_decrypt_key(
 /// Used only by crypto::privacy::encrypt_client_id().
 pub fn aes_cbc_encrypt(key: &[u8; 16], iv: &[u8; 16], plaintext: &[u8]) -> Vec<u8> {
     debug_assert!(
-        !plaintext.is_empty() && plaintext.len() % 16 == 0,
+        !plaintext.is_empty() && plaintext.len().is_multiple_of(16),
         "plaintext must be pre-padded to AES block size"
     );
 

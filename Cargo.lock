@@ -7581,6 +7581,7 @@ dependencies = [
  "aes",
  "cmac",
  "data-encoding",
+ "hex",
  "hex-literal",
  "hmac",
  "prost",

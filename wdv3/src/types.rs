@@ -138,5 +138,6 @@ pub struct DerivedKeys {
     pub mac_key_server: [u8; 32],
     /// 32 bytes. CMAC(session_key, 0x03 || mac_context) || CMAC(session_key, 0x04 || mac_context).
     /// Used for license renewal requests.
+    #[allow(dead_code)]
     pub mac_key_client: [u8; 32],
 }
