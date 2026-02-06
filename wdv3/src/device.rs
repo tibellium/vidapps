@@ -1,6 +1,9 @@
 use prost::Message;
-use rsa::RsaPrivateKey;
-use rsa::pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey};
+use rsa::{
+    RsaPrivateKey,
+    pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey},
+};
+
 use wdv3_proto::ClientIdentification;
 
 use crate::error::{CdmError, CdmResult};
@@ -8,8 +11,10 @@ use crate::types::{DeviceType, SecurityLevel};
 
 const MAGIC: &[u8] = b"WVD";
 
-/// Represents a Widevine Device.
-/// Can be parsed from a wvd file.
+/**
+    Represents a Widevine Device.
+    Can be parsed from a wvd file.
+*/
 #[derive(Debug, Clone)]
 pub struct Device {
     /// Device type as encoded in WVD file byte offset 4.
@@ -23,17 +28,23 @@ pub struct Device {
 }
 
 impl Device {
-    /// Returns the parsed RSA private key.
+    /**
+        Returns the parsed RSA private key.
+    */
     pub fn private_key(&self) -> &RsaPrivateKey {
         &self.private_key
     }
 
-    /// Returns the parsed client identification metadata.
+    /**
+        Returns the parsed client identification metadata.
+    */
     pub fn client_id(&self) -> &ClientIdentification {
         &self.client_id
     }
 
-    /// Parse a base64-encoded WVD v2 file.
+    /**
+        Parse a base64-encoded WVD v2 file.
+    */
     pub fn from_base64(wvd: impl AsRef<[u8]>) -> CdmResult<Self> {
         let bytes = data_encoding::BASE64
             .decode(wvd.as_ref())
@@ -41,7 +52,9 @@ impl Device {
         Self::from_bytes(&bytes)
     }
 
-    /// Parse a WVD v2 file from raw bytes.
+    /**
+        Parse a WVD v2 file from raw bytes.
+    */
     pub fn from_bytes(data: impl AsRef<[u8]>) -> CdmResult<Self> {
         let data: &[u8] = data.as_ref();
 
@@ -110,7 +123,9 @@ impl Device {
         })
     }
 
-    /// Serialize back into WVD v2 file format bytes.
+    /**
+        Serialize back into WVD v2 file format bytes.
+    */
     pub fn to_bytes(&self) -> CdmResult<Vec<u8>> {
         let private_key_der = self
             .private_key
@@ -151,7 +166,9 @@ impl Device {
         Ok(buffer)
     }
 
-    /// Serialize to a base64-encoded WVD string.
+    /**
+        Serialize to a base64-encoded WVD string.
+    */
     pub fn to_base64(&self) -> CdmResult<String> {
         self.to_bytes().map(|b| data_encoding::BASE64.encode(&b))
     }

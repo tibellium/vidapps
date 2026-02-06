@@ -4,36 +4,50 @@ use crate::constants::WIDEVINE_SYSTEM_ID;
 use crate::error::{CdmError, CdmResult};
 use crate::types::SystemId;
 
-/// Parsed PSSH box — preserves all ISOBMFF fields for round-trip fidelity.
-///
-/// ISOBMFF PSSH box layout:
-///   [0..4]    box_size: u32 big-endian (total box size including this header)
-///   [4..8]    box_type: "pssh" (0x70737368)
-///   [8]       version: u8 (0 or 1)
-///   [9..12]   flags: u24 (typically 0x000000)
-///   [12..28]  system_id: 16 bytes
-///   if version == 1:
-///     [28..32]  key_id_count: u32 big-endian
-///     [32..]    key_ids: key_id_count * 16 bytes
-///   [..]      data_size: u32 big-endian
-///   [..]      data: data_size bytes
+/**
+    Parsed PSSH box — preserves all ISOBMFF fields for round-trip fidelity.
+
+    ISOBMFF PSSH box layout:
+      [0..4]    box_size: u32 big-endian (total box size including this header)
+      [4..8]    box_type: "pssh" (0x70737368)
+      [8]       version: u8 (0 or 1)
+      [9..12]   flags: u24 (typically 0x000000)
+      [12..28]  system_id: 16 bytes
+      if version == 1:
+        [28..32]  key_id_count: u32 big-endian
+        [32..]    key_ids: key_id_count * 16 bytes
+      [..]      data_size: u32 big-endian
+      [..]      data: data_size bytes
+*/
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PsshBox {
-    /// PSSH box version (0 or 1).
+    /**
+        PSSH box version (0 or 1).
+    */
     pub version: u8,
-    /// 3-byte flags field (typically all zeros).
+    /**
+        3-byte flags field (typically all zeros).
+    */
     pub flags: [u8; 3],
-    /// 16-byte DRM system identifier. For Widevine this must match
-    /// `WIDEVINE_SYSTEM_ID` (EDEF8BA9-79D6-4ACE-A3C8-27DCD51D21ED).
+    /**
+        16-byte DRM system identifier. For Widevine this must match
+        `WIDEVINE_SYSTEM_ID` (EDEF8BA9-79D6-4ACE-A3C8-27DCD51D21ED).
+    */
     pub system_id: [u8; 16],
-    /// Key IDs from the box header (v1 only). Empty for v0 boxes.
+    /**
+        Key IDs from the box header (v1 only). Empty for v0 boxes.
+    */
     pub key_ids: Vec<[u8; 16]>,
-    /// Raw data payload — for Widevine, a serialized WidevinePsshData protobuf.
+    /**
+        Raw data payload — for Widevine, a serialized WidevinePsshData protobuf.
+    */
     pub data: Vec<u8>,
 }
 
 impl PsshBox {
-    /// Parse a base64-encoded PSSH box.
+    /**
+        Parse a base64-encoded PSSH box.
+    */
     pub fn from_base64(pssh: &str) -> CdmResult<Self> {
         let bytes = data_encoding::BASE64
             .decode(pssh.as_bytes())
@@ -41,7 +55,9 @@ impl PsshBox {
         Self::from_bytes(&bytes)
     }
 
-    /// Parse a PSSH box from raw bytes (full ISOBMFF box starting with box_size).
+    /**
+        Parse a PSSH box from raw bytes (full ISOBMFF box starting with box_size).
+    */
     pub fn from_bytes(input: &[u8]) -> CdmResult<Self> {
         // Minimum: 4 (size) + 4 (type) + 1 (ver) + 3 (flags) + 16 (sysid) + 4 (data_size) = 32
         if input.len() < 32 {
@@ -116,10 +132,12 @@ impl PsshBox {
         })
     }
 
-    /// Serialize back to ISOBMFF PSSH box bytes.
-    ///
-    /// Produces identical bytes to the original input when round-tripping
-    /// through `from_bytes` / `to_bytes`.
+    /**
+        Serialize back to ISOBMFF PSSH box bytes.
+
+        Produces identical bytes to the original input when round-tripping
+        through `from_bytes` / `to_bytes`.
+    */
     pub fn to_bytes(&self) -> Vec<u8> {
         // header: 4 (size) + 4 (type) + 1 (ver) + 3 (flags) + 16 (sysid) = 28
         let mut size = 28usize;
@@ -158,16 +176,20 @@ impl PsshBox {
         buf
     }
 
-    /// Serialize to a base64-encoded PSSH box string.
+    /**
+        Serialize to a base64-encoded PSSH box string.
+    */
     pub fn to_base64(&self) -> String {
         data_encoding::BASE64.encode(&self.to_bytes())
     }
 
-    /// Extract key IDs, preferring the box header (v1) over protobuf parsing (v0).
-    ///
-    /// - v1: returns the key IDs stored in the box header directly.
-    /// - v0: decodes `self.data` as a WidevinePsshData protobuf and extracts
-    ///   the `key_id` repeated field.
+    /**
+        Extract key IDs, preferring the box header (v1) over protobuf parsing (v0).
+
+        - v1: returns the key IDs stored in the box header directly.
+        - v0: decodes `self.data` as a WidevinePsshData protobuf and extracts
+          the `key_id` repeated field.
+    */
     pub fn key_ids(&self) -> CdmResult<Vec<[u8; 16]>> {
         if self.version == 1 {
             return Ok(self.key_ids.clone());
@@ -189,17 +211,23 @@ impl PsshBox {
         Ok(kids)
     }
 
-    /// Raw init data payload (the `data` field inside the PSSH box).
+    /**
+        Raw init data payload (the `data` field inside the PSSH box).
+    */
     pub fn init_data(&self) -> &[u8] {
         &self.data
     }
 
-    /// Identify the DRM system from the PSSH box's system ID.
+    /**
+        Identify the DRM system from the PSSH box's system ID.
+    */
     pub fn system_id(&self) -> SystemId {
         SystemId::from_bytes(self.system_id)
     }
 
-    /// Decode the data payload as a WidevinePsshData protobuf.
+    /**
+        Decode the data payload as a WidevinePsshData protobuf.
+    */
     pub fn widevine_pssh_data(&self) -> CdmResult<wdv3_proto::WidevinePsshData> {
         wdv3_proto::WidevinePsshData::decode(self.data.as_slice()).map_err(CdmError::from)
     }

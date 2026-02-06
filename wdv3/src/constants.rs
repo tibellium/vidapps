@@ -1,6 +1,8 @@
 use hex_literal::hex;
 
-/// Widevine DRM System ID: `edef8ba9-79d6-4ace-a3c8-27dcd51d21ed`
+/**
+    Widevine DRM System ID: `edef8ba9-79d6-4ace-a3c8-27dcd51d21ed`
+*/
 pub const WIDEVINE_SYSTEM_ID: [u8; 16] = hex!(
     "edef8ba9"
     "79d6"
@@ -9,7 +11,9 @@ pub const WIDEVINE_SYSTEM_ID: [u8; 16] = hex!(
     "27dcd51d21ed"
 );
 
-/// PlayReady DRM System ID: `9a04f079-9840-4286-ab92-e65be0885f95`
+/**
+    PlayReady DRM System ID: `9a04f079-9840-4286-ab92-e65be0885f95`
+*/
 pub const PLAYREADY_SYSTEM_ID: [u8; 16] = hex!(
     "9a04f079"
     "9840"
@@ -18,7 +22,9 @@ pub const PLAYREADY_SYSTEM_ID: [u8; 16] = hex!(
     "e65be0885f95"
 );
 
-/// Apple FairPlay DRM System ID: `94ce86fb-07ff-4f43-adb8-93d2fa968ca2`
+/**
+    Apple FairPlay DRM System ID: `94ce86fb-07ff-4f43-adb8-93d2fa968ca2`
+*/
 pub const FAIRPLAY_SYSTEM_ID: [u8; 16] = hex!(
     "94ce86fb"
     "07ff"
@@ -27,7 +33,9 @@ pub const FAIRPLAY_SYSTEM_ID: [u8; 16] = hex!(
     "93d2fa968ca2"
 );
 
-/// W3C ClearKey System ID: `1077efec-c0b2-4d02-ace3-3c1e52e2fb4b`
+/**
+    W3C ClearKey System ID: `1077efec-c0b2-4d02-ace3-3c1e52e2fb4b`
+*/
 pub const CLEARKEY_SYSTEM_ID: [u8; 16] = hex!(
     "1077efec"
     "c0b2"
@@ -36,11 +44,13 @@ pub const CLEARKEY_SYSTEM_ID: [u8; 16] = hex!(
     "3c1e52e2fb4b"
 );
 
-/// The Widevine root DrmCertificate, used to verify service certificate signatures.
-///
-/// This is a hardcoded constant extracted from a SignedDrmCertificate blob that is
-/// embedded in every Widevine CDM binary. Only the public_key field (field 4) is
-/// used — for RSA-PSS-SHA1 signature verification of service certificates.
+/**
+    The Widevine root DrmCertificate, used to verify service certificate signatures.
+
+    This is a hardcoded constant extracted from a SignedDrmCertificate blob that is
+    embedded in every Widevine CDM binary. Only the public_key field (field 4) is
+    used — for RSA-PSS-SHA1 signature verification of service certificates.
+*/
 pub const ROOT_PUBLIC_KEY_N: [u8; 384] = hex!(
     "915f33d2508264b4783f5596a6ceb5f7"
     "12e812a76f03e5073e51d4f8b9dc1cfe"
@@ -70,13 +80,19 @@ pub const ROOT_PUBLIC_KEY_N: [u8; 384] = hex!(
 
 pub const ROOT_PUBLIC_KEY_E: [u8; 3] = hex!("010001");
 
-/// Provider ID for the Widevine production environment.
+/**
+    Provider ID for the Widevine production environment.
+*/
 pub const LICENSE_PRODUCTION_PROVIDER_ID: &str = "license.widevine.com";
 
-/// Serial number for the Widevine production environment.
+/**
+    Serial number for the Widevine production environment.
+*/
 pub const LICENSE_PRODUCTION_SERIAL: [u8; 16] = hex!("1705b917cc1204868b06333a2f772a8c");
 
-/// First part of RSA public key for the Widevine production environment.
+/**
+    First part of RSA public key for the Widevine production environment.
+*/
 pub const LICENSE_PRODUCTION_N: [u8; 256] = hex!(
     "095a9f9c015012cf1b71b408d3fb64df"
     "6e5efcb05d9f6b0b2f58e24328e8590c"
@@ -96,16 +112,24 @@ pub const LICENSE_PRODUCTION_N: [u8; 256] = hex!(
     "98b5952ab6c3ef245eab7d323b5bed99"
 );
 
-/// Second part of RSA public key for the Widevine production environment.
+/**
+    Second part of RSA public key for the Widevine production environment.
+*/
 pub const LICENSE_PRODUCTION_E: [u8; 3] = hex!("010001");
 
-/// Provider ID for the Widevine staging environment.
+/**
+    Provider ID for the Widevine staging environment.
+*/
 pub const LICENSE_STAGING_PROVIDER_ID: &str = "staging.google.com";
 
-/// Serial number for the Widevine staging environment.
+/**
+    Serial number for the Widevine staging environment.
+*/
 pub const LICENSE_STAGING_SERIAL: [u8; 16] = hex!("28703454c008f63618ade7443db6c4c8");
 
-/// First part of RSA public key for the Widevine staging environment.
+/**
+    First part of RSA public key for the Widevine staging environment.
+*/
 pub const LICENSE_STAGING_N: [u8; 256] = hex!(
     "43d99a7fa067fd24af9dbc8694133836"
     "4c3303476001ef3c99a0d0c0a0604df7"
@@ -125,5 +149,7 @@ pub const LICENSE_STAGING_N: [u8; 256] = hex!(
     "c6c151c2e2955dcc3f025dd0b81221b5"
 );
 
-/// Second part of RSA public key for the Widevine staging environment.
+/**
+    Second part of RSA public key for the Widevine staging environment.
+*/
 pub const LICENSE_STAGING_E: [u8; 3] = hex!("010001");

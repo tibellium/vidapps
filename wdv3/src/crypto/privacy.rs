@@ -2,34 +2,38 @@ use prost::Message;
 use rsa::{RsaPublicKey, pkcs1::DecodeRsaPublicKey, pss};
 use sha1::Sha1;
 use signature::Verifier;
+
 use wdv3_proto::{
     DrmCertificate, EncryptedClientIdentification, SignedDrmCertificate, SignedMessage,
     signed_message::MessageType,
 };
 
+use crate::error::CdmError;
+
 use super::aes::aes_cbc_encrypt;
 use super::padding::pkcs7_pad;
 use super::rsa::rsa_oaep_sha1_encrypt;
-use crate::error::CdmError;
 
-/// Encrypt the device's ClientIdentification for privacy mode.
-///
-/// Privacy mode prevents the plaintext device identity from being visible to
-/// network observers or intermediary proxy servers.
-///
-/// Cryptographic operations (two-step hybrid encryption):
-///
-///   Step 1 — AES-128-CBC encryption of the ClientIdentification:
-///     privacy_key = random 16 bytes
-///     privacy_iv  = random 16 bytes
-///     plaintext   = pkcs7_pad(client_id_blob, block_size=16)
-///     ciphertext  = AES-128-CBC-encrypt(privacy_key, privacy_iv, plaintext)
-///
-///   Step 2 — RSA-OAEP-SHA1 wrapping of the AES key:
-///     encrypted_privacy_key = RSA-OAEP-SHA1-encrypt(
-///         public_key = DrmCertificate.public_key,
-///         plaintext  = privacy_key
-///     )
+/**
+    Encrypt the device's ClientIdentification for privacy mode.
+
+    Privacy mode prevents the plaintext device identity from being visible to
+    network observers or intermediary proxy servers.
+
+    Cryptographic operations (two-step hybrid encryption):
+
+      Step 1 — AES-128-CBC encryption of the ClientIdentification:
+        privacy_key = random 16 bytes
+        privacy_iv  = random 16 bytes
+        plaintext   = pkcs7_pad(client_id_blob, block_size=16)
+        ciphertext  = AES-128-CBC-encrypt(privacy_key, privacy_iv, plaintext)
+
+      Step 2 — RSA-OAEP-SHA1 wrapping of the AES key:
+        encrypted_privacy_key = RSA-OAEP-SHA1-encrypt(
+            public_key = DrmCertificate.public_key,
+            plaintext  = privacy_key
+        )
+*/
 pub fn encrypt_client_id(
     client_id_blob: &[u8],
     service_certificate: &DrmCertificate,
@@ -61,24 +65,26 @@ pub fn encrypt_client_id(
     })
 }
 
-/// Verify and parse a service privacy certificate.
-///
-/// The service certificate arrives as either:
-///   (a) A SignedMessage with type=SERVICE_CERTIFICATE, whose msg field contains
-///       a serialized SignedDrmCertificate, or
-///   (b) A direct serialized SignedDrmCertificate.
-/// Attempt (a) first, then fall back to (b).
-///
-/// Verification:
-///   1. Parse the outer container to extract a SignedDrmCertificate.
-///   2. Verify the signature: RSA-PSS-SHA1-verify(
-///          public_key = root_public_key,
-///          message    = signed_drm_certificate.drm_certificate,
-///          signature  = signed_drm_certificate.signature
-///      )
-///      Parameters: Hash=SHA-1, MGF=MGF1-SHA-1, Salt=20 bytes.
-///   3. Parse signed_drm_certificate.drm_certificate as a DrmCertificate.
-///   4. Return the verified SignedDrmCertificate for storage on the Session.
+/**
+    Verify and parse a service privacy certificate.
+
+    The service certificate arrives as either:
+      (a) A SignedMessage with type=SERVICE_CERTIFICATE, whose msg field contains
+          a serialized SignedDrmCertificate, or
+      (b) A direct serialized SignedDrmCertificate.
+    Attempt (a) first, then fall back to (b).
+
+    Verification:
+      1. Parse the outer container to extract a SignedDrmCertificate.
+      2. Verify the signature: RSA-PSS-SHA1-verify(
+             public_key = root_public_key,
+             message    = signed_drm_certificate.drm_certificate,
+             signature  = signed_drm_certificate.signature
+         )
+         Parameters: Hash=SHA-1, MGF=MGF1-SHA-1, Salt=20 bytes.
+      3. Parse signed_drm_certificate.drm_certificate as a DrmCertificate.
+      4. Return the verified SignedDrmCertificate for storage on the Session.
+*/
 pub fn verify_service_certificate(
     certificate_bytes: &[u8],
     root_public_key: &[u8],
@@ -110,10 +116,12 @@ pub fn verify_service_certificate(
     Ok(signed_cert)
 }
 
-/// Try to extract a SignedDrmCertificate from raw bytes.
-///
-/// Attempts to parse as a SignedMessage (type=SERVICE_CERTIFICATE) first,
-/// falling back to a direct SignedDrmCertificate.
+/**
+    Try to extract a SignedDrmCertificate from raw bytes.
+
+    Attempts to parse as a SignedMessage (type=SERVICE_CERTIFICATE) first,
+    falling back to a direct SignedDrmCertificate.
+*/
 fn try_extract_signed_certificate(data: &[u8]) -> Result<SignedDrmCertificate, CdmError> {
     // Attempt (a): parse as SignedMessage whose msg contains a SignedDrmCertificate
     if let Ok(signed_msg) = SignedMessage::decode(data)

@@ -4,10 +4,12 @@ use core::str::FromStr;
 use crate::error::ParseError;
 use crate::utils::{bytes_equal, eq_ignore_ascii_case, trim_ascii};
 
-/// Device type as encoded in WVD file byte offset 4.
-/// Values: Chrome=1, Android=2. These are defined by the WVD file format specification,
-/// not by Google's license_protocol.proto (the closest proto enum,
-/// ClientIdentification.TokenType, has unrelated values).
+/**
+    Device type as encoded in WVD file byte offset 4.
+    Values: Chrome=1, Android=2. These are defined by the WVD file format specification,
+    not by Google's license_protocol.proto (the closest proto enum,
+    ClientIdentification.TokenType, has unrelated values).
+*/
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DeviceType {
@@ -62,8 +64,10 @@ impl FromStr for DeviceType {
     }
 }
 
-/// Widevine security level.
-/// Ref: license_protocol.proto.
+/**
+    Widevine security level.
+    Ref: license_protocol.proto.
+*/
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SecurityLevel {
@@ -128,12 +132,14 @@ impl FromStr for SecurityLevel {
     }
 }
 
-/// Key type enumeration from License.KeyContainer.KeyType.
-/// Ref: license_protocol.proto, License.KeyContainer.KeyType enum.
-///
-/// Note: Protobuf default value 0 has no named variant in the proto definition.
-/// If a KeyContainer has key_type == 0, it should be treated as an unknown type
-/// and processed (decrypted, stored) but not included in the CONTENT key output.
+/**
+    Key type enumeration from License.KeyContainer.KeyType.
+    Ref: license_protocol.proto, License.KeyContainer.KeyType enum.
+
+    Note: Protobuf default value 0 has no named variant in the proto definition.
+    If a KeyContainer has key_type == 0, it should be treated as an unknown type
+    and processed (decrypted, stored) but not included in the CONTENT key output.
+*/
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum KeyType {
@@ -204,7 +210,9 @@ impl FromStr for KeyType {
     }
 }
 
-/// Proto KeyType (nested inside License.KeyContainer).
+/**
+    Proto KeyType (nested inside License.KeyContainer).
+*/
 type ProtoKeyType = wdv3_proto::license::key_container::KeyType;
 
 impl From<ProtoKeyType> for KeyType {
@@ -233,8 +241,10 @@ impl From<KeyType> for ProtoKeyType {
     }
 }
 
-/// Widevine license type.
-/// Ref: license_protocol.proto, LicenseType enum.
+/**
+    Widevine license type.
+    Ref: license_protocol.proto, LicenseType enum.
+*/
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum LicenseType {
     /// Normal one-time-use license for streaming content.
@@ -306,12 +316,14 @@ impl From<ProtoLicenseType> for LicenseType {
     }
 }
 
-/// DRM content protection system identifier.
-///
-/// Recognizes the major DRM systems by their DASH-IF registered UUIDs.
-/// Unrecognized system IDs are captured in the `Unknown` variant.
-///
-/// Reference: <https://dashif.org/identifiers/content_protection/>
+/**
+    DRM content protection system identifier.
+
+    Recognizes the major DRM systems by their DASH-IF registered UUIDs.
+    Unrecognized system IDs are captured in the `Unknown` variant.
+
+    Reference: <https://dashif.org/identifiers/content_protection/>
+*/
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SystemId {
     Widevine,
@@ -322,7 +334,9 @@ pub enum SystemId {
 }
 
 impl SystemId {
-    /// Identify a DRM system from its 16-byte UUID.
+    /**
+        Identify a DRM system from its 16-byte UUID.
+    */
     pub const fn from_bytes(bytes: [u8; 16]) -> Self {
         use crate::constants::*;
         if bytes_equal(&bytes, &WIDEVINE_SYSTEM_ID) {
@@ -338,7 +352,9 @@ impl SystemId {
         }
     }
 
-    /// Return the raw 16-byte UUID for this system.
+    /**
+        Return the raw 16-byte UUID for this system.
+    */
     pub const fn to_bytes(self) -> [u8; 16] {
         use crate::constants::*;
         match self {
@@ -350,7 +366,9 @@ impl SystemId {
         }
     }
 
-    /// Human-readable name for this system.
+    /**
+        Human-readable name for this system.
+    */
     pub const fn to_name(self) -> &'static str {
         match self {
             Self::Widevine => "Widevine",
@@ -361,11 +379,13 @@ impl SystemId {
         }
     }
 
-    /// Parse a UUID string into a `SystemId`.
-    ///
-    /// Accepts both hyphenated (`edef8ba9-79d6-4ace-a3c8-27dcd51d21ed`) and
-    /// plain (`edef8ba979d64acea3c827dcd51d21ed`) formats. Hex digits are
-    /// case-insensitive.
+    /**
+        Parse a UUID string into a `SystemId`.
+
+        Accepts both hyphenated (`edef8ba9-79d6-4ace-a3c8-27dcd51d21ed`) and
+        plain (`edef8ba979d64acea3c827dcd51d21ed`) formats. Hex digits are
+        case-insensitive.
+    */
     pub const fn from_uuid(s: &[u8]) -> Option<Self> {
         use crate::utils::hex_digit;
 
@@ -405,7 +425,9 @@ impl SystemId {
         Some(Self::from_bytes(bytes))
     }
 
-    /// Format as a standard UUID string (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
+    /**
+        Format as a standard UUID string (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
+    */
     pub fn to_uuid(self) -> String {
         let b = self.to_bytes();
         format!(
@@ -429,12 +451,16 @@ impl SystemId {
         )
     }
 
-    /// Returns `true` for recognized DRM systems.
+    /**
+        Returns `true` for recognized DRM systems.
+    */
     pub const fn is_known(self) -> bool {
         !matches!(self, Self::Unknown(_))
     }
 
-    /// Returns `true` for unrecognized DRM systems.
+    /**
+        Returns `true` for unrecognized DRM systems.
+    */
     pub const fn is_unknown(self) -> bool {
         matches!(self, Self::Unknown(_))
     }
@@ -446,32 +472,44 @@ impl fmt::Display for SystemId {
     }
 }
 
-/// A content decryption key extracted from a license response.
-///
-/// `Display` prints `kid_hex:key_hex` (e.g. `00000000000000000000000000000001:abcdef0123456789`).
-/// `Debug` prints `[CONTENT] kid_hex:key_hex` (prefixed with the key type).
+/**
+    A content decryption key extracted from a license response.
+
+    `Display` prints `kid_hex:key_hex` (e.g. `00000000000000000000000000000001:abcdef0123456789`).
+    `Debug` prints `[CONTENT] kid_hex:key_hex` (prefixed with the key type).
+*/
 #[derive(Clone, PartialEq, Eq)]
 pub struct ContentKey {
-    /// Key ID: 16 bytes, from KeyContainer.id (proto field 1),
-    /// normalized via kid_to_uuid conversion (see parse_license_response step 8c).
+    /**
+        Key ID: 16 bytes, from KeyContainer.id (proto field 1),
+        normalized via kid_to_uuid conversion (see parse_license_response step 8c).
+    */
     pub kid: [u8; 16],
-    /// Decrypted content key from KeyContainer.key (proto field 3)
-    /// after AES-CBC decryption with enc_key and KeyContainer.iv (proto field 2),
-    /// then PKCS#7 unpadding. Typically 16 bytes for AES-128 content, but the
-    /// protocol does not constrain key length — Vec<u8> is used intentionally.
+    /**
+        Decrypted content key from KeyContainer.key (proto field 3)
+        after AES-CBC decryption with enc_key and KeyContainer.iv (proto field 2),
+        then PKCS#7 unpadding. Typically 16 bytes for AES-128 content, but the
+        protocol does not constrain key length — Vec<u8> is used intentionally.
+    */
     pub key: Vec<u8>,
-    /// Key type from KeyContainer.type (proto field 4).
-    /// All types are decrypted and stored; consumers typically filter to CONTENT for output.
+    /**
+        Key type from KeyContainer.type (proto field 4).
+        All types are decrypted and stored; consumers typically filter to CONTENT for output.
+    */
     pub key_type: KeyType,
 }
 
 impl ContentKey {
-    /// Key ID as a lowercase hex string.
+    /**
+        Key ID as a lowercase hex string.
+    */
     pub fn kid_hex(&self) -> String {
         hex::encode(self.kid)
     }
 
-    /// Decrypted key as a lowercase hex string.
+    /**
+        Decrypted key as a lowercase hex string.
+    */
     pub fn key_hex(&self) -> String {
         hex::encode(&self.key)
     }
@@ -495,16 +533,24 @@ impl fmt::Debug for ContentKey {
     }
 }
 
-/// The three derived keys from a session key.
+/**
+    The three derived keys from a session key.
+*/
 pub(crate) struct DerivedKeys {
-    /// 16 bytes. AES-CMAC(session_key, 0x01 || enc_context).
-    /// Used to decrypt KeyContainer.key fields.
+    /**
+        16 bytes. AES-CMAC(session_key, 0x01 || enc_context).
+        Used to decrypt KeyContainer.key fields.
+    */
     pub(crate) enc_key: [u8; 16],
-    /// 32 bytes. CMAC(session_key, 0x01 || mac_context) || CMAC(session_key, 0x02 || mac_context).
-    /// Used to verify license response signature via HMAC-SHA256.
+    /**
+        32 bytes. CMAC(session_key, 0x01 || mac_context) || CMAC(session_key, 0x02 || mac_context).
+        Used to verify license response signature via HMAC-SHA256.
+    */
     pub(crate) mac_key_server: [u8; 32],
-    /// 32 bytes. CMAC(session_key, 0x03 || mac_context) || CMAC(session_key, 0x04 || mac_context).
-    /// Used for license renewal requests.
+    /**
+        32 bytes. CMAC(session_key, 0x03 || mac_context) || CMAC(session_key, 0x04 || mac_context).
+        Used for license renewal requests.
+    */
     #[allow(dead_code)]
     pub(crate) mac_key_client: [u8; 32],
 }

@@ -1,4 +1,6 @@
-/// Const-compatible byte slice equality.
+/**
+    Const-compatible byte slice equality.
+*/
 pub(crate) const fn bytes_equal(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
@@ -13,7 +15,9 @@ pub(crate) const fn bytes_equal(a: &[u8], b: &[u8]) -> bool {
     true
 }
 
-/// Const-compatible ASCII whitespace trimming (both ends).
+/**
+    Const-compatible ASCII whitespace trimming (both ends).
+*/
 pub(crate) const fn trim_ascii(s: &[u8]) -> &[u8] {
     let mut start = 0;
     while start < s.len() && s[start].is_ascii_whitespace() {
@@ -28,8 +32,10 @@ pub(crate) const fn trim_ascii(s: &[u8]) -> &[u8] {
     unsafe { std::slice::from_raw_parts(s.as_ptr().add(start), end - start) }
 }
 
-/// Decode a single ASCII hex digit to its 4-bit value.
-/// Returns `None` for non-hex characters.
+/**
+    Decode a single ASCII hex digit to its 4-bit value.
+    Returns `None` for non-hex characters.
+*/
 pub(crate) const fn hex_digit(b: u8) -> Option<u8> {
     match b {
         b'0'..=b'9' => Some(b - b'0'),
@@ -39,8 +45,10 @@ pub(crate) const fn hex_digit(b: u8) -> Option<u8> {
     }
 }
 
-/// Const-compatible case-insensitive ASCII byte comparison.
-/// Both slices must have the same length (caller must check).
+/**
+    Const-compatible case-insensitive ASCII byte comparison.
+    Both slices must have the same length (caller must check).
+*/
 pub(crate) const fn eq_ignore_ascii_case(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
@@ -65,25 +73,31 @@ pub(crate) const fn eq_ignore_ascii_case(a: &[u8], b: &[u8]) -> bool {
     true
 }
 
-/// Parse a key ID from various input formats.
-///
-/// String types (`&str`, `String`) are treated as hex and decoded into 16 bytes.
-/// Byte types (`&[u8]`, `[u8; 16]`, `&[u8; 16]`) are used directly when exactly
-/// 16 bytes, or decoded as hex when exactly 32 bytes.
-///
-/// Returns `None` if the input cannot be interpreted as a 16-byte key ID.
+/**
+    Parse a key ID from various input formats.
+
+    String types (`&str`, `String`) are treated as hex and decoded into 16 bytes.
+    Byte types (`&[u8]`, `[u8; 16]`, `&[u8; 16]`) are used directly when exactly
+    16 bytes, or decoded as hex when exactly 32 bytes.
+
+    Returns `None` if the input cannot be interpreted as a 16-byte key ID.
+*/
 pub fn parse_kid(input: impl ParseKid) -> Option<[u8; 16]> {
     input.parse_kid()
 }
 
-/// Trait for types that can be interpreted as a 16-byte key ID.
-///
-/// See [`parse_kid`] for details.
+/**
+    Trait for types that can be interpreted as a 16-byte key ID.
+
+    See [`parse_kid`] for details.
+*/
 pub trait ParseKid {
     fn parse_kid(self) -> Option<[u8; 16]>;
 }
 
-/// Decode exactly 32 hex digits into 16 bytes. Returns `None` on invalid hex or wrong length.
+/**
+    Decode exactly 32 hex digits into 16 bytes. Returns `None` on invalid hex or wrong length.
+*/
 fn decode_hex_kid(s: &[u8]) -> Option<[u8; 16]> {
     if s.len() != 32 {
         return None;

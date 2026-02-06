@@ -264,19 +264,29 @@ pub struct RequestMatch {
 */
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Extractor {
-    /// The kind of extractor
+    /**
+        The kind of extractor
+    */
     pub kind: ExtractorKind,
-    /// Path/pattern for the extractor (JSONPath, XPath, regex, etc.)
+    /**
+        Path/pattern for the extractor (JSONPath, XPath, regex, etc.)
+    */
     #[serde(default)]
     pub path: Option<String>,
-    /// For jsonpath_regex: regex pattern to apply after JSONPath extraction
+    /**
+        For jsonpath_regex: regex pattern to apply after JSONPath extraction
+    */
     #[serde(default)]
     pub regex: Option<String>,
-    /// For jsonpath_array: sub-extractors to apply to each array element
-    /// Supports $parent.field syntax to reference parent objects in nested paths
+    /**
+        For jsonpath_array: sub-extractors to apply to each array element
+        Supports $parent.field syntax to reference parent objects in nested paths
+    */
     #[serde(default)]
     pub each: Option<HashMap<String, String>>,
-    /// Unescape JSON unicode sequences (e.g., \\u0026 -> &) in the extracted value
+    /**
+        Unescape JSON unicode sequences (e.g., \\u0026 -> &) in the extracted value
+    */
     #[serde(default)]
     pub unescape: bool,
 }
@@ -287,26 +297,44 @@ pub struct Extractor {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ExtractorKind {
-    /// Capture the request URL itself
+    /**
+        Capture the request URL itself
+    */
     Url,
-    /// Regex with capture group on the request URL
+    /**
+        Regex with capture group on the request URL
+    */
     UrlRegex,
-    /// JSONPath query on JSON response body (returns single value)
+    /**
+        JSONPath query on JSON response body (returns single value)
+    */
     JsonPath,
-    /// JSONPath query returning array of objects with sub-extractors
-    /// Supports $parent.field syntax in `each` to reference parent objects
+    /**
+        JSONPath query returning array of objects with sub-extractors
+        Supports $parent.field syntax in `each` to reference parent objects
+    */
     #[serde(rename = "jsonpath_array")]
     JsonPathArray,
-    /// JSONPath query followed by regex extraction on the result
+    /**
+        JSONPath query followed by regex extraction on the result
+    */
     #[serde(rename = "jsonpath_regex")]
     JsonPathRegex,
-    /// XPath query on XML response body
+    /**
+        XPath query on XML response body
+    */
     XPath,
-    /// Regex with capture group on response body
+    /**
+        Regex with capture group on response body
+    */
     Regex,
-    /// First line containing ":" (for CDRM key response)
+    /**
+        First line containing ":" (for CDRM key response)
+    */
     Line,
-    /// Extract Widevine PSSH from MPD manifest
+    /**
+        Extract Widevine PSSH from MPD manifest
+    */
     Pssh,
 }
 

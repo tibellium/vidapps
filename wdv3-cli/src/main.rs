@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 
-/// Widevine L3 CDM command-line tool.
+/**
+    Widevine L3 CDM command-line tool.
+*/
 #[derive(Parser)]
 #[command(name = "wdv3")]
 struct Cli {

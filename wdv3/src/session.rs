@@ -2,13 +2,14 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use ::rsa::BigUint;
-use ::rsa::pkcs1::EncodeRsaPublicKey;
 use prost::Message;
 use rand::Rng;
+use rsa::{BigUint, pkcs1::EncodeRsaPublicKey};
 
-use wdv3_proto::signed_message::MessageType;
-use wdv3_proto::{DrmCertificate, License, LicenseRequest, SignedDrmCertificate, SignedMessage};
+use wdv3_proto::{
+    DrmCertificate, License, LicenseRequest, SignedDrmCertificate, SignedMessage,
+    signed_message::MessageType,
+};
 
 use crate::constants::{
     LICENSE_PRODUCTION_E, LICENSE_PRODUCTION_N, LICENSE_PRODUCTION_PROVIDER_ID,
@@ -21,43 +22,59 @@ use crate::error::{CdmError, CdmResult};
 use crate::pssh::PsshBox;
 use crate::types::{ContentKey, DeviceType, KeyType, LicenseType};
 
-/// Global session counter for monotonically-increasing session numbers.
+/**
+    Global session counter for monotonically-increasing session numbers.
+*/
 static SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
 
-/// A Widevine CDM session that builds license challenges and parses license responses.
-///
-/// Typical usage:
-/// ```ignore
-/// let device = WvdDevice::from_bytes(&wvd_bytes)?;
-/// let mut session = Session::new(device);
-///
-/// // Optional: enable privacy mode with a service certificate
-/// session.set_service_certificate(&cert_bytes)?;
-///
-/// // Build the challenge bytes to POST to a license server
-/// let challenge = session.build_license_challenge(&pssh, LicenseType::Streaming)?;
-///
-/// // ... user sends challenge via HTTP, gets response bytes ...
-///
-/// // Parse the response and extract content keys
-/// let keys = session.parse_license_response(&response_bytes)?;
-/// ```
+/**
+    A Widevine CDM session that builds license challenges and parses license responses.
+
+    Typical usage:
+    ```ignore
+    let device = WvdDevice::from_bytes(&wvd_bytes)?;
+    let mut session = Session::new(device);
+
+    // Optional: enable privacy mode with a service certificate
+    session.set_service_certificate(&cert_bytes)?;
+
+    // Build the challenge bytes to POST to a license server
+    let challenge = session.build_license_challenge(&pssh, LicenseType::Streaming)?;
+
+    // ... user sends challenge via HTTP, gets response bytes ...
+
+    // Parse the response and extract content keys
+    let keys = session.parse_license_response(&response_bytes)?;
+    ```
+*/
 pub struct Session {
-    /// Monotonically-increasing session number (for display/logging).
+    /**
+        Monotonically-increasing session number (for display/logging).
+    */
     number: u64,
-    /// Parsed WVD device credentials.
+    /**
+        Parsed WVD device credentials.
+    */
     device: Device,
-    /// Verified service certificate for privacy mode. None = no privacy.
+    /**
+        Verified service certificate for privacy mode. None = no privacy.
+    */
     service_certificate: Option<SignedDrmCertificate>,
-    /// Map from request_id -> (enc_context, mac_context).
-    /// Built during build_license_challenge(), consumed during parse_license_response().
+    /**
+        Map from request_id -> (enc_context, mac_context).
+        Built during build_license_challenge(), consumed during parse_license_response().
+    */
     contexts: HashMap<Vec<u8>, (Vec<u8>, Vec<u8>)>,
-    /// Extracted content keys after a successful parse_license_response().
+    /**
+        Extracted content keys after a successful parse_license_response().
+    */
     content_keys: Vec<ContentKey>,
 }
 
 impl Session {
-    /// Create a new session for the given device.
+    /**
+        Create a new session for the given device.
+    */
     pub fn new(device: Device) -> Self {
         Session {
             number: SESSION_COUNTER.fetch_add(1, Ordering::Relaxed),
@@ -68,16 +85,20 @@ impl Session {
         }
     }
 
-    /// Session number (monotonically increasing across all sessions in the process).
+    /**
+        Session number (monotonically increasing across all sessions in the process).
+    */
     pub fn number(&self) -> u64 {
         self.number
     }
 
-    /// Set (and verify) a service certificate for privacy mode.
-    ///
-    /// The certificate is verified against the Widevine root public key using
-    /// RSA-PSS-SHA1 signature verification. Once set, subsequent calls to
-    /// `build_license_challenge` will encrypt the ClientIdentification.
+    /**
+        Set (and verify) a service certificate for privacy mode.
+
+        The certificate is verified against the Widevine root public key using
+        RSA-PSS-SHA1 signature verification. Once set, subsequent calls to
+        `build_license_challenge` will encrypt the ClientIdentification.
+    */
     pub fn set_service_certificate(&mut self, raw: &[u8]) -> CdmResult<()> {
         let root_der = build_root_public_key_der()?;
         let signed_cert = privacy::verify_service_certificate(raw, &root_der)?;
@@ -85,10 +106,12 @@ impl Session {
         Ok(())
     }
 
-    /// Use the hardcoded privacy certificate for Google's production license server
-    /// (license.widevine.com).
-    ///
-    /// Skips signature verification since the certificate data is compiled-in.
+    /**
+        Use the hardcoded privacy certificate for Google's production license server
+        (license.widevine.com).
+
+        Skips signature verification since the certificate data is compiled-in.
+    */
     pub fn set_service_certificate_common(&mut self) -> CdmResult<()> {
         self.service_certificate = Some(build_hardcoded_service_certificate(
             LICENSE_PRODUCTION_PROVIDER_ID,
@@ -99,10 +122,12 @@ impl Session {
         Ok(())
     }
 
-    /// Use the hardcoded privacy certificate for Google's staging license server
-    /// (staging.google.com).
-    ///
-    /// Skips signature verification since the certificate data is compiled-in.
+    /**
+        Use the hardcoded privacy certificate for Google's staging license server
+        (staging.google.com).
+
+        Skips signature verification since the certificate data is compiled-in.
+    */
     pub fn set_service_certificate_staging(&mut self) -> CdmResult<()> {
         self.service_certificate = Some(build_hardcoded_service_certificate(
             LICENSE_STAGING_PROVIDER_ID,
@@ -113,10 +138,12 @@ impl Session {
         Ok(())
     }
 
-    /// Build a license challenge (serialized SignedMessage) for the given PSSH box.
-    ///
-    /// Returns the raw bytes that should be POSTed to a license server.
-    /// The derivation contexts are stored internally for use by `parse_license_response`.
+    /**
+        Build a license challenge (serialized SignedMessage) for the given PSSH box.
+
+        Returns the raw bytes that should be POSTed to a license server.
+        The derivation contexts are stored internally for use by `parse_license_response`.
+    */
     pub fn build_license_challenge(
         &mut self,
         pssh: &PsshBox,
@@ -195,10 +222,12 @@ impl Session {
         Ok(signed_message.encode_to_vec())
     }
 
-    /// Parse a license response and extract content keys.
-    ///
-    /// Takes the raw bytes received from the license server. Returns the
-    /// extracted content keys on success.
+    /**
+        Parse a license response and extract content keys.
+
+        Takes the raw bytes received from the license server. Returns the
+        extracted content keys on success.
+    */
     pub fn parse_license_response(&mut self, raw: &[u8]) -> CdmResult<&[ContentKey]> {
         // Step 1: Decode the SignedMessage wrapper
         let signed_message = SignedMessage::decode(raw)?;
@@ -302,17 +331,23 @@ impl Session {
         Ok(&self.content_keys)
     }
 
-    /// Returns all extracted keys (empty until `parse_license_response` succeeds).
+    /**
+        Returns all extracted keys (empty until `parse_license_response` succeeds).
+    */
     pub fn keys(&self) -> &[ContentKey] {
         &self.content_keys
     }
 
-    /// Returns only content keys (`KeyType::Content`).
+    /**
+        Returns only content keys (`KeyType::Content`).
+    */
     pub fn content_keys(&self) -> Vec<&ContentKey> {
         self.keys_of_type(KeyType::Content)
     }
 
-    /// Returns keys matching the given type.
+    /**
+        Returns keys matching the given type.
+    */
     pub fn keys_of_type(&self, key_type: KeyType) -> Vec<&ContentKey> {
         self.content_keys
             .iter()
@@ -320,13 +355,17 @@ impl Session {
             .collect()
     }
 
-    /// Look up a key by its 16-byte key ID. Returns the first match regardless of type.
+    /**
+        Look up a key by its 16-byte key ID. Returns the first match regardless of type.
+    */
     pub fn key_by_kid(&self, kid: [u8; 16]) -> Option<&ContentKey> {
         self.content_keys.iter().find(|k| k.kid == kid)
     }
 }
 
-/// Build the Widevine root RSA public key in PKCS#1 DER format from the raw N/E constants.
+/**
+    Build the Widevine root RSA public key in PKCS#1 DER format from the raw N/E constants.
+*/
 fn build_root_public_key_der() -> CdmResult<Vec<u8>> {
     let n = BigUint::from_bytes_be(&ROOT_PUBLIC_KEY_N);
     let e = BigUint::from_bytes_be(&ROOT_PUBLIC_KEY_E);
@@ -338,11 +377,13 @@ fn build_root_public_key_der() -> CdmResult<Vec<u8>> {
     Ok(der.as_bytes().to_vec())
 }
 
-/// Build a `SignedDrmCertificate` from hardcoded provider constants.
-///
-/// This constructs a DrmCertificate protobuf containing the provider_id,
-/// serial_number, and public_key, then wraps it in a SignedDrmCertificate
-/// (with an empty signature, since we trust the compiled-in data).
+/**
+    Build a `SignedDrmCertificate` from hardcoded provider constants.
+
+    This constructs a DrmCertificate protobuf containing the provider_id,
+    serial_number, and public_key, then wraps it in a SignedDrmCertificate
+    (with an empty signature, since we trust the compiled-in data).
+*/
 fn build_hardcoded_service_certificate(
     provider_id: &str,
     serial_number: &[u8],
@@ -372,11 +413,13 @@ fn build_hardcoded_service_certificate(
     })
 }
 
-/// Generate a random request_id.
-///
-/// - Android devices: mimics OEMCrypto CTR counter block format —
-///   4 random bytes + 4 zero bytes + 8-byte little-endian session number.
-/// - Chrome devices: 16 raw random bytes.
+/**
+    Generate a random request_id.
+
+    - Android devices: mimics OEMCrypto CTR counter block format —
+      4 random bytes + 4 zero bytes + 8-byte little-endian session number.
+    - Chrome devices: 16 raw random bytes.
+*/
 fn generate_request_id(device_type: DeviceType, session_number: u64) -> Vec<u8> {
     let mut rng = rand::rng();
     match device_type {
@@ -395,11 +438,13 @@ fn generate_request_id(device_type: DeviceType, session_number: u64) -> Vec<u8> 
     }
 }
 
-/// Normalize a key ID to exactly 16 bytes (UUID size).
-///
-/// 1. If the bytes are valid UTF-8 and parse as a decimal integer, convert
-///    that integer to 16 big-endian bytes.
-/// 2. Otherwise, pad with trailing zeros or truncate to 16 bytes.
+/**
+    Normalize a key ID to exactly 16 bytes (UUID size).
+
+    1. If the bytes are valid UTF-8 and parse as a decimal integer, convert
+       that integer to 16 big-endian bytes.
+    2. Otherwise, pad with trailing zeros or truncate to 16 bytes.
+*/
 fn kid_to_uuid(kid: &[u8]) -> [u8; 16] {
     // Try decimal string parse
     if let Ok(s) = std::str::from_utf8(kid)

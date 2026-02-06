@@ -9,7 +9,9 @@ use super::extractors::{ExtractedArray, extract, extract_array};
 use super::interpolate::InterpolationContext;
 use super::types::{ExtractorKind, Step, StepKind};
 
-/// User agent for HTTP fetch requests
+/**
+    User agent for HTTP fetch requests
+*/
 const FETCH_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 /**

@@ -114,18 +114,24 @@ impl ManifestStore {
         self.manifests.read().await.values().cloned().collect()
     }
 
-    /// Store a browser instance for a source
+    /**
+        Store a browser instance for a source
+    */
     pub async fn set_browser(&self, source: &str, browser: chrome_browser::ChromeBrowser) {
         let mut browsers = self.browsers.write().await;
         browsers.insert(source.to_string(), browser);
     }
 
-    /// Get the browser instance for a source (cloning is cheap - it's Arc-based)
+    /**
+        Get the browser instance for a source (cloning is cheap - it's Arc-based)
+    */
     pub async fn get_browser(&self, source: &str) -> Option<chrome_browser::ChromeBrowser> {
         self.browsers.read().await.get(source).cloned()
     }
 
-    /// Get tab 0 from the browser for a source
+    /**
+        Get tab 0 from the browser for a source
+    */
     pub async fn get_browser_tab(&self, source: &str) -> Option<chrome_browser::ChromeBrowserTab> {
         let browsers = self.browsers.read().await;
         if let Some(browser) = browsers.get(source) {

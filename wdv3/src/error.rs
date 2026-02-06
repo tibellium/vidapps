@@ -2,7 +2,9 @@ use thiserror::Error;
 
 use crate::types::SystemId;
 
-/// Errors specific to the CDM protocol exchange.
+/**
+    Errors specific to the CDM protocol exchange.
+*/
 #[derive(Debug, Clone, Error)]
 pub enum CdmError {
     // ── Encoding ───────────────────────────────────────────────────────
@@ -68,10 +70,14 @@ impl From<prost::DecodeError> for CdmError {
     }
 }
 
-/// Type alias for results that may return a [`CdmError`].
+/**
+    Type alias for results that may return a [`CdmError`].
+*/
 pub type CdmResult<T> = std::result::Result<T, CdmError>;
 
-/// Error returned by `FromStr` implementations on enum types.
+/**
+    Error returned by `FromStr` implementations on enum types.
+*/
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[error("unknown {kind} '{value}'")]
 pub struct ParseError {
