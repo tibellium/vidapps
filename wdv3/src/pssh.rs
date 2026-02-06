@@ -171,8 +171,8 @@ impl PsshBox {
         }
 
         let pssh_data = self.widevine_pssh_data()?;
-        let mut kids = Vec::with_capacity(pssh_data.key_id.len());
-        for raw_kid in &pssh_data.key_id {
+        let mut kids = Vec::with_capacity(pssh_data.key_ids.len());
+        for raw_kid in &pssh_data.key_ids {
             if raw_kid.len() != 16 {
                 return Err(pssh_err(&format!(
                     "key_id length {} (expected 16)",

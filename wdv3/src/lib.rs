@@ -2,14 +2,14 @@
 
 mod constants;
 mod crypto;
+mod device;
 mod error;
 mod pssh;
 mod session;
 mod types;
-mod wvd;
 
+pub use self::device::Device;
 pub use self::error::{CdmError, CdmResult};
 pub use self::pssh::PsshBox;
 pub use self::session::Session;
 pub use self::types::{ContentKey, KeyType, LicenseType};
-pub use self::wvd::WvdDevice;

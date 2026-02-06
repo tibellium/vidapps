@@ -1,6 +1,6 @@
 use rsa::{
     RsaPrivateKey, RsaPublicKey, oaep,
-    pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey},
+    pkcs1::DecodeRsaPublicKey,
     pss,
     traits::{Decryptor, RandomizedEncryptor},
 };
@@ -29,11 +29,8 @@ use crate::error::CdmError;
 ///   and hashes internally. Pass the raw license_request_bytes directly. Do NOT
 ///   pre-hash and then pass to this API -- that would produce a double-hash and
 ///   an invalid signature.
-pub fn rsa_pss_sha1_sign(private_key_der: &[u8], message: &[u8]) -> Result<Vec<u8>, CdmError> {
-    let private_key = RsaPrivateKey::from_pkcs1_der(private_key_der)
-        .map_err(|e| CdmError::RsaKeyParse(e.to_string()))?;
-
-    let signing_key = pss::SigningKey::<Sha1>::new_with_salt_len(private_key, 20);
+pub fn rsa_pss_sha1_sign(private_key: &RsaPrivateKey, message: &[u8]) -> Result<Vec<u8>, CdmError> {
+    let signing_key = pss::SigningKey::<Sha1>::new_with_salt_len(private_key.clone(), 20);
     let mut rng = rand::thread_rng();
     let signature = signing_key
         .try_sign_with_rng(&mut rng, message)
@@ -58,13 +55,10 @@ pub fn rsa_pss_sha1_sign(private_key_der: &[u8], message: &[u8]) -> Result<Vec<u
 ///   decryption yields non-16-byte output, the try_into() fails and should
 ///   produce CdmError::RsaOperation.
 pub fn rsa_oaep_sha1_decrypt(
-    private_key_der: &[u8],
+    private_key: &RsaPrivateKey,
     ciphertext: &[u8],
 ) -> Result<Vec<u8>, CdmError> {
-    let private_key = RsaPrivateKey::from_pkcs1_der(private_key_der)
-        .map_err(|e| CdmError::RsaKeyParse(e.to_string()))?;
-
-    let decrypting_key = oaep::DecryptingKey::<Sha1>::new(private_key);
+    let decrypting_key = oaep::DecryptingKey::<Sha1>::new(private_key.clone());
     decrypting_key
         .decrypt(ciphertext)
         .map_err(|e| CdmError::RsaOperation(e.to_string()))

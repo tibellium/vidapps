@@ -16,10 +16,10 @@ use crate::constants::{
     LICENSE_STAGING_SERIAL, ROOT_PUBLIC_KEY_E, ROOT_PUBLIC_KEY_N,
 };
 use crate::crypto::{aes, hmac, padding, privacy, rsa};
+use crate::device::Device;
 use crate::error::{CdmError, CdmResult};
 use crate::pssh::PsshBox;
 use crate::types::{ContentKey, DeviceType, KeyType, LicenseType};
-use crate::wvd::WvdDevice;
 
 /// Global session counter for monotonically-increasing session numbers.
 static SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -46,7 +46,7 @@ pub struct Session {
     /// Monotonically-increasing session number (for display/logging).
     number: u64,
     /// Parsed WVD device credentials.
-    device: WvdDevice,
+    device: Device,
     /// Verified service certificate for privacy mode. None = no privacy.
     service_certificate: Option<SignedDrmCertificate>,
     /// Map from request_id -> (enc_context, mac_context).
@@ -58,7 +58,7 @@ pub struct Session {
 
 impl Session {
     /// Create a new session for the given device.
-    pub fn new(device: WvdDevice) -> Self {
+    pub fn new(device: Device) -> Self {
         Session {
             number: SESSION_COUNTER.fetch_add(1, Ordering::Relaxed),
             device,
@@ -127,31 +127,32 @@ impl Session {
         // Build ContentIdentification with WidevinePsshData
         use wdv3_proto::license_request::ContentIdentification;
         use wdv3_proto::license_request::RequestType;
+        use wdv3_proto::license_request::content_identification::ContentIdVariant;
         use wdv3_proto::license_request::content_identification::WidevinePsshData as PsshContentId;
 
         let proto_license_type: wdv3_proto::LicenseType = license_type.into();
 
         let content_id = ContentIdentification {
-            widevine_pssh_data: Some(PsshContentId {
+            content_id_variant: Some(ContentIdVariant::WidevinePsshData(PsshContentId {
                 pssh_data: vec![pssh.init_data().to_vec()],
                 license_type: Some(proto_license_type as i32),
                 request_id: Some(request_id.clone()),
-            }),
+            })),
         };
 
         // Build LicenseRequest — privacy mode determines client_id vs encrypted_client_id
-        let (client_id_bytes, encrypted_client_id) =
+        let (client_id, encrypted_client_id) =
             if let Some(ref signed_cert) = self.service_certificate {
                 let drm_cert_bytes = signed_cert.drm_certificate.as_deref().ok_or_else(|| {
                     CdmError::CertificateDecode("missing drm_certificate in service cert".into())
                 })?;
                 let drm_cert = DrmCertificate::decode(drm_cert_bytes)
                     .map_err(|e: prost::DecodeError| CdmError::ProtobufDecode(e.to_string()))?;
-                let encrypted = privacy::encrypt_client_id(&self.device.client_id_blob, &drm_cert)?;
+                let client_id_bytes = self.device.client_id.encode_to_vec();
+                let encrypted = privacy::encrypt_client_id(&client_id_bytes, &drm_cert)?;
                 (None, Some(encrypted))
             } else {
-                // Send client_id_blob as raw bytes (it's already a serialized ClientIdentification)
-                (Some(self.device.client_id_blob.clone()), None)
+                (Some(self.device.client_id.clone()), None)
             };
 
         let request_time = SystemTime::now()
@@ -164,7 +165,7 @@ impl Session {
         let key_control_nonce: u32 = rand::thread_rng().gen_range(1..2_147_483_648);
 
         let license_request = LicenseRequest {
-            client_id: client_id_bytes,
+            client_id,
             content_id: Some(content_id),
             r#type: Some(RequestType::New as i32),
             request_time: Some(request_time),
@@ -182,8 +183,7 @@ impl Session {
         self.contexts.insert(request_id, (enc_ctx, mac_ctx));
 
         // Sign the serialized LicenseRequest with RSA-PSS-SHA1
-        let signature =
-            rsa::rsa_pss_sha1_sign(&self.device.private_key_der, &license_request_bytes)?;
+        let signature = rsa::rsa_pss_sha1_sign(&self.device.private_key, &license_request_bytes)?;
 
         // Wrap in SignedMessage
         let signed_message = SignedMessage {
@@ -247,7 +247,7 @@ impl Session {
 
         // Step 5: Decrypt the session key with RSA-OAEP-SHA1
         let session_key_vec =
-            rsa::rsa_oaep_sha1_decrypt(&self.device.private_key_der, session_key_enc)?;
+            rsa::rsa_oaep_sha1_decrypt(&self.device.private_key, session_key_enc)?;
         let session_key: [u8; 16] = session_key_vec.try_into().map_err(|v: Vec<u8>| {
             CdmError::RsaOperation(format!("session key is {} bytes, expected 16", v.len()))
         })?;

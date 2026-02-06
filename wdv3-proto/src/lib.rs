@@ -1,5 +1,5 @@
 pub mod license_protocol {
-    include!(concat!(env!("OUT_DIR"), "/license_protocol.rs"));
+    include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
 
 pub use license_protocol::*;
