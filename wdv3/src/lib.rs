@@ -11,5 +11,5 @@ mod wvd;
 pub use self::error::{CdmError, CdmResult};
 pub use self::pssh::PsshBox;
 pub use self::session::Session;
-pub use self::types::{ContentKey, KeyType};
+pub use self::types::{ContentKey, KeyType, LicenseType};
 pub use self::wvd::WvdDevice;

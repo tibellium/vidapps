@@ -5,15 +5,20 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use ::rsa::BigUint;
 use ::rsa::pkcs1::EncodeRsaPublicKey;
 use prost::Message;
+use rand::Rng;
 
 use wdv3_proto::signed_message::MessageType;
 use wdv3_proto::{DrmCertificate, License, LicenseRequest, SignedDrmCertificate, SignedMessage};
 
-use crate::constants::{ROOT_PUBLIC_KEY_E, ROOT_PUBLIC_KEY_N};
+use crate::constants::{
+    LICENSE_PRODUCTION_E, LICENSE_PRODUCTION_N, LICENSE_PRODUCTION_PROVIDER_ID,
+    LICENSE_PRODUCTION_SERIAL, LICENSE_STAGING_E, LICENSE_STAGING_N, LICENSE_STAGING_PROVIDER_ID,
+    LICENSE_STAGING_SERIAL, ROOT_PUBLIC_KEY_E, ROOT_PUBLIC_KEY_N,
+};
 use crate::crypto::{aes, hmac, padding, privacy, rsa};
 use crate::error::{CdmError, CdmResult};
 use crate::pssh::PsshBox;
-use crate::types::{ContentKey, DeviceType, KeyType};
+use crate::types::{ContentKey, DeviceType, KeyType, LicenseType};
 use crate::wvd::WvdDevice;
 
 /// Global session counter for monotonically-increasing session numbers.
@@ -30,7 +35,7 @@ static SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
 /// session.set_service_certificate(&cert_bytes)?;
 ///
 /// // Build the challenge bytes to POST to a license server
-/// let challenge = session.build_license_challenge(&pssh)?;
+/// let challenge = session.build_license_challenge(&pssh, LicenseType::Streaming)?;
 ///
 /// // ... user sends challenge via HTTP, gets response bytes ...
 ///
@@ -80,23 +85,56 @@ impl Session {
         Ok(())
     }
 
+    /// Use the hardcoded privacy certificate for Google's production license server
+    /// (license.widevine.com).
+    ///
+    /// Skips signature verification since the certificate data is compiled-in.
+    pub fn set_service_certificate_common(&mut self) -> CdmResult<()> {
+        self.service_certificate = Some(build_hardcoded_service_certificate(
+            LICENSE_PRODUCTION_PROVIDER_ID,
+            &LICENSE_PRODUCTION_SERIAL,
+            &LICENSE_PRODUCTION_N,
+            &LICENSE_PRODUCTION_E,
+        )?);
+        Ok(())
+    }
+
+    /// Use the hardcoded privacy certificate for Google's staging license server
+    /// (staging.google.com).
+    ///
+    /// Skips signature verification since the certificate data is compiled-in.
+    pub fn set_service_certificate_staging(&mut self) -> CdmResult<()> {
+        self.service_certificate = Some(build_hardcoded_service_certificate(
+            LICENSE_STAGING_PROVIDER_ID,
+            &LICENSE_STAGING_SERIAL,
+            &LICENSE_STAGING_N,
+            &LICENSE_STAGING_E,
+        )?);
+        Ok(())
+    }
+
     /// Build a license challenge (serialized SignedMessage) for the given PSSH box.
     ///
     /// Returns the raw bytes that should be POSTed to a license server.
     /// The derivation contexts are stored internally for use by `parse_license_response`.
-    pub fn build_license_challenge(&mut self, pssh: &PsshBox) -> CdmResult<Vec<u8>> {
-        let request_id = generate_request_id(self.device.device_type);
+    pub fn build_license_challenge(
+        &mut self,
+        pssh: &PsshBox,
+        license_type: LicenseType,
+    ) -> CdmResult<Vec<u8>> {
+        let request_id = generate_request_id(self.device.device_type, self.number);
 
         // Build ContentIdentification with WidevinePsshData
-        use wdv3_proto::LicenseType;
         use wdv3_proto::license_request::ContentIdentification;
         use wdv3_proto::license_request::RequestType;
         use wdv3_proto::license_request::content_identification::WidevinePsshData as PsshContentId;
 
+        let proto_license_type: wdv3_proto::LicenseType = license_type.into();
+
         let content_id = ContentIdentification {
             widevine_pssh_data: Some(PsshContentId {
                 pssh_data: vec![pssh.init_data().to_vec()],
-                license_type: Some(LicenseType::Streaming as i32),
+                license_type: Some(proto_license_type as i32),
                 request_id: Some(request_id.clone()),
             }),
         };
@@ -121,7 +159,9 @@ impl Session {
             .unwrap_or_default()
             .as_secs() as i64;
 
-        let key_control_nonce: u32 = rand::random();
+        // Range [1, 2^31) — upper bound ensures the value fits in a signed int32
+        // (Java/JNI compatibility in the Android CDM). Lower bound avoids protobuf default 0.
+        let key_control_nonce: u32 = rand::thread_rng().gen_range(1..2_147_483_648);
 
         let license_request = LicenseRequest {
             client_id: client_id_bytes,
@@ -164,6 +204,15 @@ impl Session {
         // Step 1: Decode the SignedMessage wrapper
         let signed_message = SignedMessage::decode(raw)
             .map_err(|e: prost::DecodeError| CdmError::ProtobufDecode(e.to_string()))?;
+
+        // Verify this is a LICENSE message, not something else
+        let msg_type = signed_message.r#type.unwrap_or(0);
+        if msg_type != MessageType::License as i32 {
+            return Err(CdmError::ProtobufDecode(format!(
+                "expected LICENSE message (type {}), got type {msg_type}",
+                MessageType::License as i32,
+            )));
+        }
 
         let msg = signed_message
             .msg
@@ -283,16 +332,60 @@ fn build_root_public_key_der() -> CdmResult<Vec<u8>> {
     Ok(der.as_bytes().to_vec())
 }
 
+/// Build a `SignedDrmCertificate` from hardcoded provider constants.
+///
+/// This constructs a DrmCertificate protobuf containing the provider_id,
+/// serial_number, and public_key, then wraps it in a SignedDrmCertificate
+/// (with an empty signature, since we trust the compiled-in data).
+fn build_hardcoded_service_certificate(
+    provider_id: &str,
+    serial_number: &[u8],
+    n: &[u8],
+    e: &[u8],
+) -> CdmResult<SignedDrmCertificate> {
+    // Build the RSA public key DER from N/E
+    let pubkey = ::rsa::RsaPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))
+        .map_err(|e| CdmError::RsaKeyParse(format!("{e}")))?;
+    let pub_der = pubkey
+        .to_pkcs1_der()
+        .map_err(|e| CdmError::RsaKeyParse(format!("{e}")))?;
+
+    // Build DrmCertificate protobuf
+    let drm_cert = DrmCertificate {
+        provider_id: Some(provider_id.to_owned()),
+        serial_number: Some(serial_number.to_vec()),
+        public_key: Some(pub_der.as_bytes().to_vec()),
+        ..Default::default()
+    };
+    let drm_cert_bytes = drm_cert.encode_to_vec();
+
+    Ok(SignedDrmCertificate {
+        drm_certificate: Some(drm_cert_bytes),
+        // No signature — we trust the hardcoded data
+        ..Default::default()
+    })
+}
+
 /// Generate a random request_id.
 ///
-/// - Android devices: 16 random bytes, hex-encoded -> 32-byte ASCII Vec
-/// - Chrome devices: 16 raw random bytes
-fn generate_request_id(device_type: DeviceType) -> Vec<u8> {
-    let mut raw = [0u8; 16];
-    rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut raw);
+/// - Android devices: mimics OEMCrypto CTR counter block format —
+///   4 random bytes + 4 zero bytes + 8-byte little-endian session number.
+/// - Chrome devices: 16 raw random bytes.
+fn generate_request_id(device_type: DeviceType, session_number: u64) -> Vec<u8> {
+    let mut rng = rand::thread_rng();
     match device_type {
-        DeviceType::Android => hex::encode(raw).into_bytes(),
-        DeviceType::Chrome => raw.to_vec(),
+        DeviceType::Android => {
+            let mut id = vec![0u8; 16];
+            rand::RngCore::fill_bytes(&mut rng, &mut id[..4]);
+            // bytes 4..8 stay zero
+            id[8..16].copy_from_slice(&session_number.to_le_bytes());
+            id
+        }
+        DeviceType::Chrome => {
+            let mut id = vec![0u8; 16];
+            rand::RngCore::fill_bytes(&mut rng, &mut id);
+            id
+        }
     }
 }
 

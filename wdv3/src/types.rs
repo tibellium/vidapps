@@ -112,6 +112,41 @@ impl From<KeyType> for ProtoKeyType {
     }
 }
 
+/// Widevine license type.
+/// Ref: license_protocol.proto, LicenseType enum.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum LicenseType {
+    /// Normal one-time-use license for streaming content.
+    #[default]
+    Streaming,
+    /// Offline-use license, usually for downloaded content.
+    Offline,
+    /// License type decision is left to the provider.
+    Automatic,
+}
+
+type ProtoLicenseType = wdv3_proto::LicenseType;
+
+impl From<LicenseType> for ProtoLicenseType {
+    fn from(lt: LicenseType) -> Self {
+        match lt {
+            LicenseType::Streaming => Self::Streaming,
+            LicenseType::Offline => Self::Offline,
+            LicenseType::Automatic => Self::Automatic,
+        }
+    }
+}
+
+impl From<ProtoLicenseType> for LicenseType {
+    fn from(proto: ProtoLicenseType) -> Self {
+        match proto {
+            ProtoLicenseType::Streaming => Self::Streaming,
+            ProtoLicenseType::Offline => Self::Offline,
+            ProtoLicenseType::Automatic => Self::Automatic,
+        }
+    }
+}
+
 /// A content decryption key extracted from a license response.
 #[derive(Debug, Clone)]
 pub struct ContentKey {
