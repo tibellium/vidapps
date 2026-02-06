@@ -139,6 +139,21 @@ impl Session {
     }
 
     /**
+        Build a service certificate request message.
+
+        Returns raw bytes that should be POSTed to the license server URL.
+        The response should be passed to `set_service_certificate` to enable
+        privacy mode for the subsequent license challenge.
+    */
+    pub fn service_certificate_request() -> Vec<u8> {
+        let msg = SignedMessage {
+            r#type: Some(MessageType::ServiceCertificateRequest as i32),
+            ..Default::default()
+        };
+        msg.encode_to_vec()
+    }
+
+    /**
         Build a license challenge (serialized SignedMessage) for the given PSSH box.
 
         Returns the raw bytes that should be POSTed to a license server.
@@ -679,14 +694,10 @@ mod tests {
     // ── Service certificate ───────────────────────────────────────────
 
     #[test]
-    fn set_service_certificate_rejects_invalid() {
+    fn set_service_certificate_accepts_valid() {
         let mut session = Session::new(test_device());
-        // The test certificate is not signed by the Widevine root key
-        let err = session.set_service_certificate(TEST_CERT).unwrap_err();
-        assert!(matches!(
-            err,
-            CdmError::RsaKeyParse(_) | CdmError::CertificateSignatureMismatch
-        ),);
+        // The test certificate is a valid Widevine-signed service certificate
+        session.set_service_certificate(TEST_CERT).unwrap();
     }
 
     #[test]
@@ -706,6 +717,13 @@ mod tests {
     fn set_service_certificate_staging() {
         let mut session = Session::new(test_device());
         session.set_service_certificate_staging().unwrap();
+    }
+
+    #[test]
+    fn set_service_certificate_from_server_response() {
+        const CERT_RESPONSE: &[u8] = include_bytes!("../testfiles/cert_response.bin");
+        let mut session = Session::new(test_device());
+        session.set_service_certificate(CERT_RESPONSE).unwrap();
     }
 
     // ── parse_license_response error cases ────────────────────────────
