@@ -5,6 +5,7 @@ members = [
     "vidplayer",
     "vidproxy",
     "wdv3",
+    "wdv3-cli",
     "wdv3-proto",
 ]
 

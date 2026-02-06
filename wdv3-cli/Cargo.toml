@@ -1,0 +1,18 @@
+[package]
+name = "wdv3-cli"
+version = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
+
+[dependencies]
+wdv3 = { path = "../wdv3" }
+
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = "0.13"
+anyhow = "1"
+hex = "0.4"
+
+[[bin]]
+name = "wdv3"
+path = "src/main.rs"

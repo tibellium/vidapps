@@ -5349,7 +5349,9 @@ checksum = "04e9018c9d814e5f30cc16a0f03271aeab3571e609612d9fe78c1aa8d11c2f62"
 dependencies = [
  "base64",
  "bytes",
+ "encoding_rs",
  "futures-core",
+ "h2",
  "http",
  "http-body",
  "http-body-util",
@@ -5358,6 +5360,7 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
+ "mime",
  "percent-encoding",
  "pin-project-lite",
  "quinn",
@@ -7592,6 +7595,18 @@ dependencies = [
  "signature",
  "thiserror 2.0.18",
  "wdv3-proto",
+]
+
+[[package]]
+name = "wdv3-cli"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "hex",
+ "reqwest 0.13.1",
+ "tokio",
+ "wdv3",
 ]
 
 [[package]]
