@@ -321,8 +321,8 @@ impl Session {
     }
 
     /// Look up a key by its 16-byte key ID. Returns the first match regardless of type.
-    pub fn key_by_kid(&self, kid: &[u8; 16]) -> Option<&ContentKey> {
-        self.content_keys.iter().find(|k| &k.kid == kid)
+    pub fn key_by_kid(&self, kid: [u8; 16]) -> Option<&ContentKey> {
+        self.content_keys.iter().find(|k| k.kid == kid)
     }
 }
 

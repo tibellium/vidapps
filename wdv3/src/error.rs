@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::types::SystemId;
+
 /// Errors specific to the CDM protocol exchange.
 #[derive(Debug, Clone, Error)]
 pub enum CdmError {
@@ -24,8 +26,8 @@ pub enum CdmError {
     // ── PSSH box parsing ──────────────────────────────────────────────
     #[error("malformed PSSH box: {0}")]
     PsshMalformed(String),
-    #[error("PSSH system ID does not match Widevine")]
-    PsshSystemIdMismatch,
+    #[error("PSSH system ID is {0}, expected {1}")]
+    PsshSystemIdMismatch(SystemId, SystemId),
 
     // ── Protobuf ──────────────────────────────────────────────────────
     #[error("protobuf decode failed: {0}")]

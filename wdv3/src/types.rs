@@ -2,7 +2,7 @@ use core::fmt;
 use core::str::FromStr;
 
 use crate::error::ParseError;
-use crate::utils::{eq_ignore_ascii_case, trim_ascii};
+use crate::utils::{bytes_equal, eq_ignore_ascii_case, trim_ascii};
 
 /// Device type as encoded in WVD file byte offset 4.
 /// Values: Chrome=1, Android=2. These are defined by the WVD file format specification,
@@ -306,6 +306,146 @@ impl From<ProtoLicenseType> for LicenseType {
     }
 }
 
+/// DRM content protection system identifier.
+///
+/// Recognizes the major DRM systems by their DASH-IF registered UUIDs.
+/// Unrecognized system IDs are captured in the `Unknown` variant.
+///
+/// Reference: <https://dashif.org/identifiers/content_protection/>
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SystemId {
+    Widevine,
+    PlayReady,
+    FairPlay,
+    ClearKey,
+    Unknown([u8; 16]),
+}
+
+impl SystemId {
+    /// Identify a DRM system from its 16-byte UUID.
+    pub const fn from_bytes(bytes: [u8; 16]) -> Self {
+        use crate::constants::*;
+        if bytes_equal(&bytes, &WIDEVINE_SYSTEM_ID) {
+            Self::Widevine
+        } else if bytes_equal(&bytes, &PLAYREADY_SYSTEM_ID) {
+            Self::PlayReady
+        } else if bytes_equal(&bytes, &FAIRPLAY_SYSTEM_ID) {
+            Self::FairPlay
+        } else if bytes_equal(&bytes, &CLEARKEY_SYSTEM_ID) {
+            Self::ClearKey
+        } else {
+            Self::Unknown(bytes)
+        }
+    }
+
+    /// Return the raw 16-byte UUID for this system.
+    pub const fn to_bytes(self) -> [u8; 16] {
+        use crate::constants::*;
+        match self {
+            Self::Widevine => WIDEVINE_SYSTEM_ID,
+            Self::PlayReady => PLAYREADY_SYSTEM_ID,
+            Self::FairPlay => FAIRPLAY_SYSTEM_ID,
+            Self::ClearKey => CLEARKEY_SYSTEM_ID,
+            Self::Unknown(bytes) => bytes,
+        }
+    }
+
+    /// Human-readable name for this system.
+    pub const fn to_name(self) -> &'static str {
+        match self {
+            Self::Widevine => "Widevine",
+            Self::PlayReady => "PlayReady",
+            Self::FairPlay => "FairPlay",
+            Self::ClearKey => "ClearKey",
+            Self::Unknown(_) => "Unknown",
+        }
+    }
+
+    /// Parse a UUID string into a `SystemId`.
+    ///
+    /// Accepts both hyphenated (`edef8ba9-79d6-4ace-a3c8-27dcd51d21ed`) and
+    /// plain (`edef8ba979d64acea3c827dcd51d21ed`) formats. Hex digits are
+    /// case-insensitive.
+    pub const fn from_uuid(s: &[u8]) -> Option<Self> {
+        use crate::utils::hex_digit;
+
+        let mut bytes = [0u8; 16];
+        let mut bi = 0; // index into bytes
+        let mut si = 0; // index into s
+
+        while si < s.len() {
+            if s[si] == b'-' {
+                si += 1;
+                continue;
+            }
+            if bi >= 16 {
+                return None; // too many hex digits
+            }
+            // Need two hex digits for one byte
+            if si + 1 >= s.len() {
+                return None; // odd trailing digit
+            }
+            let hi = match hex_digit(s[si]) {
+                Some(v) => v,
+                None => return None,
+            };
+            let lo = match hex_digit(s[si + 1]) {
+                Some(v) => v,
+                None => return None,
+            };
+            bytes[bi] = (hi << 4) | lo;
+            bi += 1;
+            si += 2;
+        }
+
+        if bi != 16 {
+            return None; // too few hex digits
+        }
+
+        Some(Self::from_bytes(bytes))
+    }
+
+    /// Format as a standard UUID string (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
+    pub fn to_uuid(self) -> String {
+        let b = self.to_bytes();
+        format!(
+            "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+            b[0],
+            b[1],
+            b[2],
+            b[3],
+            b[4],
+            b[5],
+            b[6],
+            b[7],
+            b[8],
+            b[9],
+            b[10],
+            b[11],
+            b[12],
+            b[13],
+            b[14],
+            b[15],
+        )
+    }
+
+    /// Returns `true` for recognized DRM systems.
+    pub const fn is_known(self) -> bool {
+        !matches!(self, Self::Unknown(_))
+    }
+
+    /// Returns `true` for unrecognized DRM systems.
+    pub const fn is_unknown(self) -> bool {
+        matches!(self, Self::Unknown(_))
+    }
+}
+
+impl fmt::Display for SystemId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({})", self.to_name(), self.to_uuid())
+    }
+}
+
 /// A content decryption key extracted from a license response.
 ///
 /// `Display` prints `kid_hex:key_hex` (e.g. `00000000000000000000000000000001:abcdef0123456789`).
@@ -586,5 +726,172 @@ mod tests {
         );
         assert_eq!(LicenseType::from_name(b""), None);
         assert_eq!(LicenseType::from_name(b"bad"), None);
+    }
+
+    #[test]
+    fn system_id_from_known_bytes() {
+        use crate::constants::*;
+        assert_eq!(SystemId::from_bytes(WIDEVINE_SYSTEM_ID), SystemId::Widevine);
+        assert_eq!(
+            SystemId::from_bytes(PLAYREADY_SYSTEM_ID),
+            SystemId::PlayReady
+        );
+        assert_eq!(SystemId::from_bytes(FAIRPLAY_SYSTEM_ID), SystemId::FairPlay);
+        assert_eq!(SystemId::from_bytes(CLEARKEY_SYSTEM_ID), SystemId::ClearKey);
+    }
+
+    #[test]
+    fn system_id_to_bytes_round_trip() {
+        use crate::constants::*;
+        for (id, expected) in [
+            (SystemId::Widevine, WIDEVINE_SYSTEM_ID),
+            (SystemId::PlayReady, PLAYREADY_SYSTEM_ID),
+            (SystemId::FairPlay, FAIRPLAY_SYSTEM_ID),
+            (SystemId::ClearKey, CLEARKEY_SYSTEM_ID),
+        ] {
+            assert_eq!(id.to_bytes(), expected);
+            assert_eq!(SystemId::from_bytes(id.to_bytes()), id);
+        }
+    }
+
+    #[test]
+    fn system_id_unknown_preserves_bytes() {
+        let bytes: [u8; 16] = hex!("00112233445566778899aabbccddeeff");
+        let id = SystemId::from_bytes(bytes);
+        assert_eq!(id, SystemId::Unknown(bytes));
+        assert_eq!(id.to_bytes(), bytes);
+    }
+
+    #[test]
+    fn system_id_is_known() {
+        assert!(SystemId::Widevine.is_known());
+        assert!(SystemId::PlayReady.is_known());
+        assert!(SystemId::FairPlay.is_known());
+        assert!(SystemId::ClearKey.is_known());
+        assert!(!SystemId::Unknown([0; 16]).is_known());
+
+        assert!(!SystemId::Widevine.is_unknown());
+        assert!(SystemId::Unknown([0; 16]).is_unknown());
+    }
+
+    #[test]
+    fn system_id_to_name() {
+        assert_eq!(SystemId::Widevine.to_name(), "Widevine");
+        assert_eq!(SystemId::PlayReady.to_name(), "PlayReady");
+        assert_eq!(SystemId::FairPlay.to_name(), "FairPlay");
+        assert_eq!(SystemId::ClearKey.to_name(), "ClearKey");
+        assert_eq!(SystemId::Unknown([0; 16]).to_name(), "Unknown");
+    }
+
+    #[test]
+    fn system_id_display() {
+        assert_eq!(
+            format!("{}", SystemId::Widevine),
+            "Widevine (edef8ba9-79d6-4ace-a3c8-27dcd51d21ed)"
+        );
+        assert_eq!(
+            format!("{}", SystemId::PlayReady),
+            "PlayReady (9a04f079-9840-4286-ab92-e65be0885f95)"
+        );
+        assert_eq!(
+            format!("{}", SystemId::FairPlay),
+            "FairPlay (94ce86fb-07ff-4f43-adb8-93d2fa968ca2)"
+        );
+        assert_eq!(
+            format!("{}", SystemId::ClearKey),
+            "ClearKey (1077efec-c0b2-4d02-ace3-3c1e52e2fb4b)"
+        );
+        assert_eq!(
+            format!("{}", SystemId::Unknown([0; 16])),
+            "Unknown (00000000-0000-0000-0000-000000000000)"
+        );
+    }
+
+    #[test]
+    fn system_id_to_uuid() {
+        assert_eq!(
+            SystemId::Widevine.to_uuid(),
+            "edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"
+        );
+        assert_eq!(
+            SystemId::PlayReady.to_uuid(),
+            "9a04f079-9840-4286-ab92-e65be0885f95"
+        );
+        assert_eq!(
+            SystemId::Unknown([0; 16]).to_uuid(),
+            "00000000-0000-0000-0000-000000000000"
+        );
+    }
+
+    #[test]
+    fn system_id_from_uuid_hyphenated() {
+        assert_eq!(
+            SystemId::from_uuid(b"edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"),
+            Some(SystemId::Widevine)
+        );
+        assert_eq!(
+            SystemId::from_uuid(b"9a04f079-9840-4286-ab92-e65be0885f95"),
+            Some(SystemId::PlayReady)
+        );
+        assert_eq!(
+            SystemId::from_uuid(b"94ce86fb-07ff-4f43-adb8-93d2fa968ca2"),
+            Some(SystemId::FairPlay)
+        );
+        assert_eq!(
+            SystemId::from_uuid(b"1077efec-c0b2-4d02-ace3-3c1e52e2fb4b"),
+            Some(SystemId::ClearKey)
+        );
+    }
+
+    #[test]
+    fn system_id_from_uuid_plain() {
+        assert_eq!(
+            SystemId::from_uuid(b"edef8ba979d64acea3c827dcd51d21ed"),
+            Some(SystemId::Widevine)
+        );
+    }
+
+    #[test]
+    fn system_id_from_uuid_case_insensitive() {
+        assert_eq!(
+            SystemId::from_uuid(b"EDEF8BA9-79D6-4ACE-A3C8-27DCD51D21ED"),
+            Some(SystemId::Widevine)
+        );
+        assert_eq!(
+            SystemId::from_uuid(b"Edef8BA9-79d6-4Ace-a3c8-27dcd51d21ED"),
+            Some(SystemId::Widevine)
+        );
+    }
+
+    #[test]
+    fn system_id_from_uuid_round_trip() {
+        for id in [
+            SystemId::Widevine,
+            SystemId::PlayReady,
+            SystemId::FairPlay,
+            SystemId::ClearKey,
+            SystemId::Unknown(hex!("00112233445566778899aabbccddeeff")),
+        ] {
+            let uuid = id.to_uuid();
+            assert_eq!(SystemId::from_uuid(uuid.as_bytes()), Some(id));
+        }
+    }
+
+    #[test]
+    fn system_id_from_uuid_invalid() {
+        assert_eq!(SystemId::from_uuid(b""), None);
+        assert_eq!(SystemId::from_uuid(b"not-a-uuid"), None);
+        assert_eq!(
+            SystemId::from_uuid(b"edef8ba9-79d6-4ace-a3c8-27dcd51d21"),
+            None
+        ); // too short
+        assert_eq!(
+            SystemId::from_uuid(b"edef8ba9-79d6-4ace-a3c8-27dcd51d21edff"),
+            None
+        ); // too long
+        assert_eq!(
+            SystemId::from_uuid(b"zdef8ba9-79d6-4ace-a3c8-27dcd51d21ed"),
+            None
+        ); // invalid hex
     }
 }

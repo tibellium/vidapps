@@ -1,3 +1,18 @@
+/// Const-compatible byte slice equality.
+pub(crate) const fn bytes_equal(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
 /// Const-compatible ASCII whitespace trimming (both ends).
 pub(crate) const fn trim_ascii(s: &[u8]) -> &[u8] {
     let mut start = 0;
@@ -11,6 +26,17 @@ pub(crate) const fn trim_ascii(s: &[u8]) -> &[u8] {
     // SAFETY: start <= end <= s.len(), but we use manual slicing for const.
     // Unfortunately &s[start..end] isn't const-stable, so we use from_raw_parts.
     unsafe { std::slice::from_raw_parts(s.as_ptr().add(start), end - start) }
+}
+
+/// Decode a single ASCII hex digit to its 4-bit value.
+/// Returns `None` for non-hex characters.
+pub(crate) const fn hex_digit(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
 
 /// Const-compatible case-insensitive ASCII byte comparison.

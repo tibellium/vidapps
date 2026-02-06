@@ -2,6 +2,7 @@ use prost::Message;
 
 use crate::constants::WIDEVINE_SYSTEM_ID;
 use crate::error::{CdmError, CdmResult};
+use crate::types::SystemId;
 
 /// Parsed PSSH box — preserves all ISOBMFF fields for round-trip fidelity.
 ///
@@ -69,7 +70,9 @@ impl PsshBox {
         system_id.copy_from_slice(&box_data[12..28]);
 
         if system_id != WIDEVINE_SYSTEM_ID {
-            return Err(CdmError::PsshSystemIdMismatch);
+            let detected = SystemId::from_bytes(system_id);
+            let expected = SystemId::Widevine;
+            return Err(CdmError::PsshSystemIdMismatch(detected, expected));
         }
 
         let mut offset = 28;
@@ -189,6 +192,11 @@ impl PsshBox {
     /// Raw init data payload (the `data` field inside the PSSH box).
     pub fn init_data(&self) -> &[u8] {
         &self.data
+    }
+
+    /// Identify the DRM system from the PSSH box's system ID.
+    pub fn system_id(&self) -> SystemId {
+        SystemId::from_bytes(self.system_id)
     }
 
     /// Decode the data payload as a WidevinePsshData protobuf.
@@ -326,7 +334,7 @@ mod tests {
         // Corrupt system ID
         raw[12] = 0xFF;
         let err = PsshBox::from_bytes(&raw).unwrap_err();
-        assert!(matches!(err, CdmError::PsshSystemIdMismatch));
+        assert!(matches!(err, CdmError::PsshSystemIdMismatch(_, _)));
     }
 
     #[test]
