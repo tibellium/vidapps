@@ -4,19 +4,23 @@ use crate::device::Device;
 
 static DEVICES_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/devices");
 
-/// Return an iterator over all embedded devices, lazily parsed.
-/// Skips files that fail to parse (shouldn't happen with valid .wvd files).
+/**
+    Return an iterator over all embedded devices, lazily parsed.
+    Skips files that fail to parse (shouldn't happen with valid .wvd files).
+*/
 pub fn all() -> impl Iterator<Item = Device> {
     DEVICES_DIR
         .files()
         .filter_map(|file| Device::from_bytes(file.contents()).ok())
 }
 
-/// Pick a random embedded device.
-///
-/// # Panics
-///
-/// Panics if the embedded devices directory is empty or contains an unparseable file.
+/**
+    Pick a random embedded device.
+
+    # Panics
+
+    Panics if the embedded devices directory is empty or contains an unparseable file.
+*/
 pub fn random() -> Device {
     let files: Vec<_> = DEVICES_DIR.files().collect();
     assert!(!files.is_empty(), "no embedded device files");
@@ -24,7 +28,9 @@ pub fn random() -> Device {
     Device::from_bytes(files[idx].contents()).expect("embedded .wvd file failed to parse")
 }
 
-/// Return the number of embedded device files.
+/**
+    Return the number of embedded device files.
+*/
 pub fn count() -> usize {
     DEVICES_DIR.files().count()
 }
