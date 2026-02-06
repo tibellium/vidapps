@@ -31,7 +31,7 @@ use crate::error::CdmError;
 ///   an invalid signature.
 pub fn rsa_pss_sha1_sign(private_key: &RsaPrivateKey, message: &[u8]) -> Result<Vec<u8>, CdmError> {
     let signing_key = pss::SigningKey::<Sha1>::new_with_salt_len(private_key.clone(), 20);
-    let mut rng = rand::thread_rng();
+    let mut rng = rsa::rand_core::OsRng;
     let signature = signing_key
         .try_sign_with_rng(&mut rng, message)
         .map_err(|e| CdmError::RsaOperation(e.to_string()))?;
@@ -83,7 +83,7 @@ pub fn rsa_oaep_sha1_encrypt(public_key_der: &[u8], plaintext: &[u8]) -> Result<
         .map_err(|e| CdmError::RsaKeyParse(e.to_string()))?;
 
     let encrypting_key = oaep::EncryptingKey::<Sha1>::new(public_key);
-    let mut rng = rand::thread_rng();
+    let mut rng = rsa::rand_core::OsRng;
     encrypting_key
         .encrypt_with_rng(&mut rng, plaintext)
         .map_err(|e| CdmError::RsaOperation(e.to_string()))

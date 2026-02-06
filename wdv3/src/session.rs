@@ -146,8 +146,7 @@ impl Session {
                 let drm_cert_bytes = signed_cert.drm_certificate.as_deref().ok_or_else(|| {
                     CdmError::CertificateDecode("missing drm_certificate in service cert".into())
                 })?;
-                let drm_cert = DrmCertificate::decode(drm_cert_bytes)
-                    .map_err(|e: prost::DecodeError| CdmError::ProtobufDecode(e.to_string()))?;
+                let drm_cert = DrmCertificate::decode(drm_cert_bytes)?;
                 let client_id_bytes = self.device.client_id.encode_to_vec();
                 let encrypted = privacy::encrypt_client_id(&client_id_bytes, &drm_cert)?;
                 (None, Some(encrypted))
@@ -162,7 +161,7 @@ impl Session {
 
         // Range [1, 2^31) — upper bound ensures the value fits in a signed int32
         // (Java/JNI compatibility in the Android CDM). Lower bound avoids protobuf default 0.
-        let key_control_nonce: u32 = rand::thread_rng().gen_range(1..2_147_483_648);
+        let key_control_nonce: u32 = rand::rng().random_range(1..2_147_483_648);
 
         let license_request = LicenseRequest {
             client_id,
@@ -202,8 +201,7 @@ impl Session {
     /// extracted content keys on success.
     pub fn parse_license_response(&mut self, raw: &[u8]) -> CdmResult<&[ContentKey]> {
         // Step 1: Decode the SignedMessage wrapper
-        let signed_message = SignedMessage::decode(raw)
-            .map_err(|e: prost::DecodeError| CdmError::ProtobufDecode(e.to_string()))?;
+        let signed_message = SignedMessage::decode(raw)?;
 
         // Verify this is a LICENSE message, not something else
         let msg_type = signed_message.r#type.unwrap_or(0);
@@ -227,8 +225,7 @@ impl Session {
         })?;
 
         // Step 2: Decode the License from msg
-        let license = License::decode(msg)
-            .map_err(|e: prost::DecodeError| CdmError::ProtobufDecode(e.to_string()))?;
+        let license = License::decode(msg)?;
 
         // Step 3: Extract request_id from the license identification
         let license_id = license
@@ -381,7 +378,7 @@ fn build_hardcoded_service_certificate(
 ///   4 random bytes + 4 zero bytes + 8-byte little-endian session number.
 /// - Chrome devices: 16 raw random bytes.
 fn generate_request_id(device_type: DeviceType, session_number: u64) -> Vec<u8> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     match device_type {
         DeviceType::Android => {
             let mut id = vec![0u8; 16];

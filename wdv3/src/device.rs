@@ -100,8 +100,7 @@ impl Device {
         let client_id_bytes = &data[cid_start..cid_start + client_id_len as usize];
 
         // Parse and validate the ClientIdentification protobuf
-        let client_id = ClientIdentification::decode(client_id_bytes)
-            .map_err(|e| CdmError::ProtobufDecode(e.to_string()))?;
+        let client_id = ClientIdentification::decode(client_id_bytes)?;
 
         Ok(Device {
             device_type,

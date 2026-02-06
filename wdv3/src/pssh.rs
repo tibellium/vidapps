@@ -193,8 +193,7 @@ impl PsshBox {
 
     /// Decode the data payload as a WidevinePsshData protobuf.
     pub fn widevine_pssh_data(&self) -> CdmResult<wdv3_proto::WidevinePsshData> {
-        wdv3_proto::WidevinePsshData::decode(self.data.as_slice())
-            .map_err(|e| CdmError::ProtobufDecode(e.to_string()))
+        wdv3_proto::WidevinePsshData::decode(self.data.as_slice()).map_err(CdmError::from)
     }
 }
 

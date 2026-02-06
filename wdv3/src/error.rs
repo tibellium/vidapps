@@ -60,6 +60,12 @@ pub enum CdmError {
     ContextNotFound,
 }
 
+impl From<prost::DecodeError> for CdmError {
+    fn from(e: prost::DecodeError) -> Self {
+        Self::ProtobufDecode(e.to_string())
+    }
+}
+
 /// Type alias for results that may return a [`CdmError`].
 pub type CdmResult<T> = std::result::Result<T, CdmError>;
 

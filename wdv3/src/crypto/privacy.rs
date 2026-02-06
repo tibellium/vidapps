@@ -41,8 +41,9 @@ pub fn encrypt_client_id(
     // Generate random AES key and IV
     let mut privacy_key = [0u8; 16];
     let mut privacy_iv = [0u8; 16];
-    rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut privacy_key);
-    rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut privacy_iv);
+    let mut rng = rand::rng();
+    rand::RngCore::fill_bytes(&mut rng, &mut privacy_key);
+    rand::RngCore::fill_bytes(&mut rng, &mut privacy_iv);
 
     // Step 1: pad and encrypt the client ID
     let padded = pkcs7_pad(client_id_blob, 16);
