@@ -214,6 +214,9 @@ pub struct Step {
     /// Extractors to run on the response
     #[serde(default)]
     pub extract: HashMap<String, Extractor>,
+    /// Sub-actions for Automation steps
+    #[serde(default)]
+    pub steps: Vec<AutomationAction>,
 }
 
 /**
@@ -230,6 +233,22 @@ pub struct WaitCondition {
     /// Additional delay in seconds after other conditions
     #[serde(default)]
     pub delay: Option<f64>,
+}
+
+/**
+    An automation action within an Automation step.
+*/
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "kind")]
+pub enum AutomationAction {
+    /// Click an element by CSS selector (searches main frame and all iframes)
+    Click {
+        /// CSS selector to find the element
+        selector: String,
+        /// Optional wait condition after clicking
+        #[serde(default)]
+        wait_for: Option<WaitCondition>,
+    },
 }
 
 /**
@@ -251,6 +270,8 @@ pub enum StepKind {
     Document,
     /// Execute custom JavaScript in page context
     Script,
+    /// Execute browser automation actions (clicks, typing, etc.)
+    Automation,
 }
 
 /**
