@@ -30,7 +30,7 @@ tempfile = "3"
 
 # DRM sniffer (Chrome automation + key extraction)
 chrome-browser = { workspace = true }
-drm-widevine = { path = "../drm/widevine", features = ["static-devices"] }
+drm-widevine = { workspace = true, features = ["static-devices"] }
 reqwest = { version = "0.13", features = ["json", "socks"] }
 base64 = "0.22"
 anyhow = "1.0"

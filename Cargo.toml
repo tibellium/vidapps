@@ -1,12 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-    "drm/core",
-    "drm/widevine-proto",
-    "drm/widevine",
-    "drm/playready-format",
-    "drm/playready",
-    "drm/cli",
     "vidwall",
     "vidplayer",
     "vidproxy",
@@ -18,13 +12,14 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
-chrome-browser = { git = "https://github.com/tibellium/crates", rev = "18ef7eb0febe69b821c968aa6a9856f5dfb49f10" }
-ffmpeg-types = { git = "https://github.com/tibellium/crates", rev = "18ef7eb0febe69b821c968aa6a9856f5dfb49f10" }
-ffmpeg-source = { git = "https://github.com/tibellium/crates", rev = "18ef7eb0febe69b821c968aa6a9856f5dfb49f10" }
-ffmpeg-decode = { git = "https://github.com/tibellium/crates", rev = "18ef7eb0febe69b821c968aa6a9856f5dfb49f10" }
-ffmpeg-transform = { git = "https://github.com/tibellium/crates", rev = "18ef7eb0febe69b821c968aa6a9856f5dfb49f10" }
-ffmpeg-encode = { git = "https://github.com/tibellium/crates", rev = "18ef7eb0febe69b821c968aa6a9856f5dfb49f10" }
-ffmpeg-sink = { git = "https://github.com/tibellium/crates", rev = "18ef7eb0febe69b821c968aa6a9856f5dfb49f10" }
+chrome-browser = { git = "https://github.com/tibellium/crates", rev = "be562b953841786740fc68387686c30fa0c4a568" }
+drm-widevine = { git = "https://github.com/tibellium/crates", rev = "be562b953841786740fc68387686c30fa0c4a568" }
+ffmpeg-types = { git = "https://github.com/tibellium/crates", rev = "be562b953841786740fc68387686c30fa0c4a568" }
+ffmpeg-source = { git = "https://github.com/tibellium/crates", rev = "be562b953841786740fc68387686c30fa0c4a568" }
+ffmpeg-decode = { git = "https://github.com/tibellium/crates", rev = "be562b953841786740fc68387686c30fa0c4a568" }
+ffmpeg-transform = { git = "https://github.com/tibellium/crates", rev = "be562b953841786740fc68387686c30fa0c4a568" }
+ffmpeg-encode = { git = "https://github.com/tibellium/crates", rev = "be562b953841786740fc68387686c30fa0c4a568" }
+ffmpeg-sink = { git = "https://github.com/tibellium/crates", rev = "be562b953841786740fc68387686c30fa0c4a568" }
 
 [profile.release]
 opt-level = 3
