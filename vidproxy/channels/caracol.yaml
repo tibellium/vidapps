@@ -15,7 +15,7 @@ discovery:
     expires_in: 86400 # Refresh discovery daily
 
   steps:
-    - name: "go_live"
+    - name: "go_to_livetv"
       kind: Navigate
       url: "https://www.caracoltv.com/senal-vivo"
       wait_for:
@@ -90,7 +90,7 @@ metadata:
     expires_in: 3600 # Refresh EPG hourly
 
   steps:
-    - name: "go_schedule"
+    - name: "go_to_schedule"
       kind: Navigate
       url: "https://www.caracoltv.com/programacion"
       wait_for:
@@ -124,7 +124,7 @@ content:
       Cookie: "${{get_manifest.cookie}}"
 
   steps:
-    - name: "go_live"
+    - name: "go_to_livetv"
       kind: Navigate
       url: "https://www.caracoltv.com/senal-vivo"
       wait_for:
