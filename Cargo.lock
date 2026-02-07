@@ -991,7 +991,7 @@ dependencies = [
 [[package]]
 name = "chrome-browser"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=be562b953841786740fc68387686c30fa0c4a568#be562b953841786740fc68387686c30fa0c4a568"
+source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
 dependencies = [
  "anyhow",
  "base64",
@@ -1012,13 +1012,13 @@ dependencies = [
 [[package]]
 name = "chrome-client"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=be562b953841786740fc68387686c30fa0c4a568#be562b953841786740fc68387686c30fa0c4a568"
+source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
 dependencies = [
  "anyhow",
  "chrome-primitives",
  "chrome-protocol",
  "futures-util",
- "reqwest 0.13.1",
+ "reqwest",
  "serde",
  "serde_json",
  "serde_with",
@@ -1031,12 +1031,12 @@ dependencies = [
 [[package]]
 name = "chrome-primitives"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=be562b953841786740fc68387686c30fa0c4a568#be562b953841786740fc68387686c30fa0c4a568"
+source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
 
 [[package]]
 name = "chrome-protocol"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=be562b953841786740fc68387686c30fa0c4a568#be562b953841786740fc68387686c30fa0c4a568"
+source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
 dependencies = [
  "anyhow",
  "base64",
@@ -1152,7 +1152,7 @@ dependencies = [
  "cocoa-foundation 0.1.2",
  "core-foundation 0.9.4",
  "core-graphics 0.23.2",
- "foreign-types 0.5.0",
+ "foreign-types",
  "libc",
  "objc",
 ]
@@ -1168,7 +1168,7 @@ dependencies = [
  "cocoa-foundation 0.2.0",
  "core-foundation 0.10.0",
  "core-graphics 0.24.0",
- "foreign-types 0.5.0",
+ "foreign-types",
  "libc",
  "objc",
 ]
@@ -1338,7 +1338,7 @@ dependencies = [
  "bitflags 1.3.2",
  "core-foundation 0.9.4",
  "core-graphics-types 0.1.3",
- "foreign-types 0.5.0",
+ "foreign-types",
  "libc",
 ]
 
@@ -1351,7 +1351,7 @@ dependencies = [
  "bitflags 2.10.0",
  "core-foundation 0.10.0",
  "core-graphics-types 0.2.0",
- "foreign-types 0.5.0",
+ "foreign-types",
  "libc",
 ]
 
@@ -1364,7 +1364,7 @@ dependencies = [
  "bitflags 2.10.0",
  "core-foundation 0.9.4",
  "core-graphics-types 0.1.3",
- "foreign-types 0.5.0",
+ "foreign-types",
  "libc",
 ]
 
@@ -1411,7 +1411,7 @@ checksum = "a593227b66cbd4007b2a050dfdd9e1d1318311409c8d600dc82ba1b15ca9c130"
 dependencies = [
  "core-foundation 0.10.0",
  "core-graphics 0.24.0",
- "foreign-types 0.5.0",
+ "foreign-types",
  "libc",
 ]
 
@@ -1851,7 +1851,7 @@ checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 [[package]]
 name = "drm-core"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=be562b953841786740fc68387686c30fa0c4a568#be562b953841786740fc68387686c30fa0c4a568"
+source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
 dependencies = [
  "data-encoding",
  "hex",
@@ -1862,7 +1862,7 @@ dependencies = [
 [[package]]
 name = "drm-widevine"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=be562b953841786740fc68387686c30fa0c4a568#be562b953841786740fc68387686c30fa0c4a568"
+source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
 dependencies = [
  "aes",
  "cmac",
@@ -1884,7 +1884,7 @@ dependencies = [
 [[package]]
 name = "drm-widevine-proto"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=be562b953841786740fc68387686c30fa0c4a568#be562b953841786740fc68387686c30fa0c4a568"
+source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
 dependencies = [
  "drm-core",
  "prost",
@@ -2168,7 +2168,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-decode"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=be562b953841786740fc68387686c30fa0c4a568#be562b953841786740fc68387686c30fa0c4a568"
+source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-source",
@@ -2189,7 +2189,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-sink"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=be562b953841786740fc68387686c30fa0c4a568#be562b953841786740fc68387686c30fa0c4a568"
+source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-types",
@@ -2198,18 +2198,19 @@ dependencies = [
 [[package]]
 name = "ffmpeg-source"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=be562b953841786740fc68387686c30fa0c4a568#be562b953841786740fc68387686c30fa0c4a568"
+source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
 dependencies = [
  "aes",
  "bytecount",
  "ctr",
+ "drm-core",
  "ffmpeg-next",
  "ffmpeg-types",
  "libc",
  "mp4-atom",
  "mpeg2ts",
  "quick-xml 0.37.5",
- "reqwest 0.12.28",
+ "reqwest",
  "serde",
  "tokio",
  "url",
@@ -2232,7 +2233,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-transform"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=be562b953841786740fc68387686c30fa0c4a568#be562b953841786740fc68387686c30fa0c4a568"
+source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-types",
@@ -2241,7 +2242,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-types"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=be562b953841786740fc68387686c30fa0c4a568#be562b953841786740fc68387686c30fa0c4a568"
+source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
 dependencies = [
  "static_assertions",
 ]
@@ -2380,21 +2381,12 @@ dependencies = [
 
 [[package]]
 name = "foreign-types"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
-dependencies = [
- "foreign-types-shared 0.1.1",
-]
-
-[[package]]
-name = "foreign-types"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d737d9aa519fb7b749cbc3b962edcf310a8dd1f4b67c91c4f83975dbdd17d965"
 dependencies = [
  "foreign-types-macros",
- "foreign-types-shared 0.3.1",
+ "foreign-types-shared",
 ]
 
 [[package]]
@@ -2407,12 +2399,6 @@ dependencies = [
  "quote",
  "syn 2.0.114",
 ]
-
-[[package]]
-name = "foreign-types-shared"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
 name = "foreign-types-shared"
@@ -2751,7 +2737,7 @@ dependencies = [
  "etagere",
  "filedescriptor",
  "flume",
- "foreign-types 0.5.0",
+ "foreign-types",
  "futures",
  "gpui-macros",
  "gpui_collections",
@@ -2884,7 +2870,7 @@ dependencies = [
  "core-foundation 0.10.0",
  "core-video",
  "ctor",
- "foreign-types 0.5.0",
+ "foreign-types",
  "metal",
  "objc",
 ]
@@ -3213,22 +3199,6 @@ dependencies = [
  "rustls-pki-types",
  "tokio",
  "tokio-rustls",
- "tower-service",
-]
-
-[[package]]
-name = "hyper-tls"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70206fc6890eaca9fde8a0bf71caa2ddfc9fe045ac9e5c70df101a7dbde866e0"
-dependencies = [
- "bytes",
- "http-body-util",
- "hyper",
- "hyper-util",
- "native-tls",
- "tokio",
- "tokio-native-tls",
  "tower-service",
 ]
 
@@ -3949,7 +3919,7 @@ dependencies = [
  "bitflags 2.10.0",
  "block",
  "core-graphics-types 0.1.3",
- "foreign-types 0.5.0",
+ "foreign-types",
  "log",
  "objc",
  "paste",
@@ -4016,10 +3986,11 @@ dependencies = [
 
 [[package]]
 name = "mp4-atom"
-version = "0.4.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e6ca41187fd83535ec10045e7bd4e6ee508b5eb0488c3bce66bca9182d26a96"
+checksum = "5e8e949244bbd26ea7eb6d936af3a6a0202be68bcfc9afce700f3c9026860ff7"
 dependencies = [
+ "derive_more 2.1.1",
  "num",
  "paste",
  "thiserror 1.0.69",
@@ -4070,23 +4041,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a51313c5820b0b02bd422f4b44776fbf47961755c74ce64afc73bfad10226c3"
 dependencies = [
  "getrandom 0.2.17",
-]
-
-[[package]]
-name = "native-tls"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87de3442987e9dbec73158d5c715e7ad9072fda936bb03d19d7fa10e00520f0e"
-dependencies = [
- "libc",
- "log",
- "openssl",
- "openssl-probe 0.1.6",
- "openssl-sys",
- "schannel",
- "security-framework 2.11.1",
- "security-framework-sys",
- "tempfile",
 ]
 
 [[package]]
@@ -4540,54 +4494,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "openssl"
-version = "0.10.75"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08838db121398ad17ab8531ce9de97b244589089e290a384c900cb9ff7434328"
-dependencies = [
- "bitflags 2.10.0",
- "cfg-if",
- "foreign-types 0.3.2",
- "libc",
- "once_cell",
- "openssl-macros",
- "openssl-sys",
-]
-
-[[package]]
-name = "openssl-macros"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.114",
-]
-
-[[package]]
-name = "openssl-probe"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
-
-[[package]]
 name = "openssl-probe"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
-
-[[package]]
-name = "openssl-sys"
-version = "0.9.111"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82cab2d520aa75e3c58898289429321eb788c3106963d0dc886ec7a5f4adc321"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
- "vcpkg",
-]
 
 [[package]]
 name = "option-ext"
@@ -5504,49 +5414,6 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 
 [[package]]
 name = "reqwest"
-version = "0.12.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
-dependencies = [
- "base64",
- "bytes",
- "encoding_rs",
- "futures-core",
- "futures-util",
- "h2",
- "http",
- "http-body",
- "http-body-util",
- "hyper",
- "hyper-rustls",
- "hyper-tls",
- "hyper-util",
- "js-sys",
- "log",
- "mime",
- "native-tls",
- "percent-encoding",
- "pin-project-lite",
- "rustls-pki-types",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "sync_wrapper",
- "tokio",
- "tokio-native-tls",
- "tokio-util",
- "tower",
- "tower-http",
- "tower-service",
- "url",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "wasm-streams",
- "web-sys",
-]
-
-[[package]]
-name = "reqwest"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04e9018c9d814e5f30cc16a0f03271aeab3571e609612d9fe78c1aa8d11c2f62"
@@ -5555,6 +5422,7 @@ dependencies = [
  "bytes",
  "encoding_rs",
  "futures-core",
+ "futures-util",
  "h2",
  "http",
  "http-body",
@@ -5576,12 +5444,14 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
+ "tokio-util",
  "tower",
  "tower-http",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
 ]
 
@@ -5762,10 +5632,10 @@ version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "612460d5f7bea540c490b2b6395d8e34a953e52b491accd6c86c8164c5932a63"
 dependencies = [
- "openssl-probe 0.2.1",
+ "openssl-probe",
  "rustls-pki-types",
  "schannel",
- "security-framework 3.5.1",
+ "security-framework",
 ]
 
 [[package]]
@@ -5802,7 +5672,7 @@ dependencies = [
  "rustls-native-certs",
  "rustls-platform-verifier-android",
  "rustls-webpki",
- "security-framework 3.5.1",
+ "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
  "windows-sys 0.61.2",
@@ -5984,19 +5854,6 @@ name = "seahash"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
-
-[[package]]
-name = "security-framework"
-version = "2.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "897b2245f0b511c87893af39b033e5ca9cce68824c4d7e7630b5a1d339658d02"
-dependencies = [
- "bitflags 2.10.0",
- "core-foundation 0.9.4",
- "core-foundation-sys",
- "libc",
- "security-framework-sys",
-]
 
 [[package]]
 name = "security-framework"
@@ -7004,16 +6861,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-native-tls"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbae76ab933c85776efabc971569dd6119c580d8f5d448769dec1764bf796ef2"
-dependencies = [
- "native-tls",
- "tokio",
-]
-
-[[package]]
 name = "tokio-rustls"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7591,7 +7438,7 @@ dependencies = [
  "include_dir",
  "jsonpath-rust",
  "regex",
- "reqwest 0.13.1",
+ "reqwest",
  "scraper",
  "serde",
  "serde_json",

@@ -21,15 +21,15 @@ pub fn extract_drm_info_from_mpd(
         .widevine_pssh()
         .into_iter()
         .next()
-        .map(|p| &p.data_base64)
-        .or_else(|| drm_info.pssh_boxes.first().map(|p| &p.data_base64))
+        .or(drm_info.pssh_boxes.first())
+        .map(|p| p.to_base64())
         .ok_or_else(|| anyhow!("No PSSH found in MPD"))?;
 
     // Extract default_KID from MPD content using regex
     // Format: cenc:default_KID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
     let default_kid = extract_default_kid_from_mpd(mpd_content);
 
-    Ok((pssh.clone(), default_kid))
+    Ok((pssh, default_kid))
 }
 
 /**

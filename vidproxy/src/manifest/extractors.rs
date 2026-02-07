@@ -1106,11 +1106,11 @@ fn extract_pssh(content: &str, url: &str) -> Result<String> {
         .widevine_pssh()
         .into_iter()
         .next()
-        .map(|p| &p.data_base64)
-        .or_else(|| drm_info.pssh_boxes.first().map(|p| &p.data_base64))
+        .or(drm_info.pssh_boxes.first())
+        .map(|p| p.to_base64())
         .ok_or_else(|| anyhow!("No PSSH found in MPD"))?;
 
-    Ok(pssh.clone())
+    Ok(pssh)
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ffmpeg_sink::{Sink, SinkConfig};
-use ffmpeg_source::{DecryptionKey, Source, SourceConfig};
+use ffmpeg_source::{ContentKey, Source, SourceConfig};
 use tokio::sync::watch;
 
 use crate::segments::SegmentManager;
@@ -23,16 +23,12 @@ pub async fn run_remux_pipeline(
     // Build source config with decryption keys if provided
     let mut source_config = SourceConfig::default();
     if !decryption_keys.is_empty() {
-        let keys: Vec<DecryptionKey> = decryption_keys
+        let keys: Vec<ContentKey> = decryption_keys
             .iter()
-            .filter_map(|key| {
-                if let Some((key_id, key_value)) = key.split_once(':') {
-                    Some(DecryptionKey {
-                        key_id: key_id.to_string(),
-                        key: key_value.to_string(),
-                    })
-                } else {
-                    eprintln!("Warning: decryption key must be in 'key_id:key' format, ignoring");
+            .filter_map(|key| match key.parse::<ContentKey>() {
+                Ok(k) => Some(k),
+                Err(e) => {
+                    eprintln!("Warning: invalid decryption key '{key}': {e}");
                     None
                 }
             })
