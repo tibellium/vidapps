@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Args;
 
+use drm_playready::PlayReadyExt;
 use drm_widevine::WidevineExt;
 
 /**
@@ -30,11 +31,34 @@ impl InspectPsshCommand {
             }
         }
 
+        // Widevine-specific data
         if let Ok(pssh_data) = pssh.widevine_pssh_data()
             && let Some(content_id) = &pssh_data.content_id
         {
             println!();
             println!("Content ID: {}", String::from_utf8_lossy(content_id));
+        }
+
+        // PlayReady-specific data
+        if let Ok(wrm) = pssh.playready_wrm_header() {
+            println!();
+            println!("WRM Header: v{}", wrm.version);
+            if let Some(url) = &wrm.la_url {
+                println!("LA URL:     {url}");
+            }
+            if let Some(url) = &wrm.lui_url {
+                println!("LUI URL:    {url}");
+            }
+            if let Some(ds_id) = &wrm.ds_id {
+                println!("DS ID:      {ds_id}");
+            }
+            if !wrm.kids.is_empty() {
+                println!();
+                println!("PlayReady Key IDs ({}):", wrm.kids.len());
+                for sk in &wrm.kids {
+                    println!("  {}", hex::encode(sk.key_id));
+                }
+            }
         }
 
         Ok(())
