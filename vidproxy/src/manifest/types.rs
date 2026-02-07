@@ -241,9 +241,17 @@ pub struct WaitCondition {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "kind")]
 pub enum AutomationAction {
-    /// Click an element by CSS selector (searches main frame and all iframes)
+    /// Click an element by CSS selector in the main frame
     Click {
         /// CSS selector to find the element
+        selector: String,
+        /// Optional wait condition after clicking
+        #[serde(default)]
+        wait_for: Option<WaitCondition>,
+    },
+    /// Click the center of an iframe element (for cross-origin iframes)
+    ClickIframe {
+        /// CSS selector to find the iframe element in the main frame
         selector: String,
         /// Optional wait condition after clicking
         #[serde(default)]

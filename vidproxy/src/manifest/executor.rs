@@ -5,9 +5,6 @@ use chrome_browser::{ChromeBrowserTab, NetworkRequestStream};
 use regex::Regex;
 use reqwest::{Client, Proxy};
 
-use chrome_browser::primitives::Point;
-use serde::Deserialize;
-
 use super::extractors::{ExtractedArray, extract, extract_array};
 use super::interpolate::InterpolationContext;
 use super::types::{AutomationAction, Extractor, ExtractorKind, Step, StepKind, WaitCondition};
@@ -581,15 +578,6 @@ async fn execute_script(
 }
 
 /**
-    Coordinates returned by the iframe-aware element search script.
-*/
-#[derive(Debug, Deserialize)]
-struct ClickCoordinates {
-    x: f64,
-    y: f64,
-}
-
-/**
     Execute an Automation step containing browser interaction actions.
 */
 async fn execute_automation(
@@ -609,6 +597,9 @@ async fn execute_automation(
             AutomationAction::Click { selector, wait_for } => {
                 execute_click_action(selector, wait_for.as_ref(), tab, context).await?;
             }
+            AutomationAction::ClickIframe { selector, wait_for } => {
+                execute_click_iframe_action(selector, wait_for.as_ref(), tab, context).await?;
+            }
         }
     }
 
@@ -616,12 +607,10 @@ async fn execute_automation(
 }
 
 /**
-    Execute a Click action, searching the main frame and all iframes.
+    Execute a Click action on an element in the main frame.
 
-    Runs a JavaScript snippet that finds the element by CSS selector,
-    first in the main frame, then recursively in all same-origin iframes.
-    Computes absolute page coordinates and clicks using mouse_click,
-    which dispatches at page level (Chrome routes to the correct frame).
+    Uses the chrome-browser Element API to wait for the element,
+    scroll it into view, and click its center with real mouse events.
 */
 async fn execute_click_action(
     selector_template: &str,
@@ -632,54 +621,34 @@ async fn execute_click_action(
     let selector = context.interpolate(selector_template)?;
     println!("[executor] Clicking element: {}", selector);
 
-    let script = format!(
-        r#"(() => {{
-            const selector = {};
+    let element = tab.wait_for_selector(&selector).await?;
+    element.click().await?;
 
-            function getCoords(el, offsetX, offsetY) {{
-                const r = el.getBoundingClientRect();
-                return {{ x: offsetX + r.left + r.width / 2, y: offsetY + r.top + r.height / 2 }};
-            }}
-
-            // Try main frame first
-            const main = document.querySelector(selector);
-            if (main) return getCoords(main, 0, 0);
-
-            // Recursively search iframes
-            function search(doc, ox, oy) {{
-                const iframes = doc.querySelectorAll("iframe");
-                for (const iframe of iframes) {{
-                    try {{
-                        const ir = iframe.getBoundingClientRect();
-                        const nx = ox + ir.left;
-                        const ny = oy + ir.top;
-                        const idoc = iframe.contentDocument || iframe.contentWindow?.document;
-                        if (!idoc) continue;
-                        const el = idoc.querySelector(selector);
-                        if (el) return getCoords(el, nx, ny);
-                        const nested = search(idoc, nx, ny);
-                        if (nested) return nested;
-                    }} catch (e) {{ continue; }}
-                }}
-                return null;
-            }}
-
-            return search(document, 0, 0);
-        }})()"#,
-        serde_json::to_string(&selector)?
-    );
-
-    let result = tab.eval_json(&script, false).await?;
-
-    if result.is_null() {
-        return Err(anyhow!("Element not found in any frame: {}", selector));
+    if let Some(wait_condition) = wait_for {
+        apply_wait_condition(wait_condition, tab, context).await?;
     }
 
-    let coords: ClickCoordinates = serde_json::from_value(result)
-        .map_err(|e| anyhow!("Failed to parse click coordinates: {}", e))?;
+    Ok(())
+}
 
-    println!("[executor] Clicking at ({:.1}, {:.1})", coords.x, coords.y);
-    tab.mouse_click(Point::new(coords.x, coords.y)).await?;
+/**
+    Execute a Click action on an iframe element.
+
+    Finds the iframe element in the main frame by CSS selector, scrolls it
+    into view, and clicks its center. Chrome routes the click into the
+    cross-origin iframe, which is useful for starting embedded video players.
+*/
+async fn execute_click_iframe_action(
+    selector_template: &str,
+    wait_for: Option<&WaitCondition>,
+    tab: &ChromeBrowserTab,
+    context: &InterpolationContext,
+) -> Result<()> {
+    let selector = context.interpolate(selector_template)?;
+    println!("[executor] Clicking iframe: {}", selector);
+
+    let element = tab.wait_for_selector(&selector).await?;
+    element.click().await?;
 
     if let Some(wait_condition) = wait_for {
         apply_wait_condition(wait_condition, tab, context).await?;
