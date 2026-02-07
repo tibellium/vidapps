@@ -467,9 +467,11 @@ fn parse_objects(r: &mut Reader<'_>) -> Result<Vec<XmrObject>, FormatError> {
 fn parse_object(r: &mut Reader<'_>) -> Result<XmrObject, FormatError> {
     let flags = r.read_u16be()?;
     let obj_type = r.read_u16be()?;
-    let length = r.read_u32be()? as usize;
+    let raw_length = r.read_u32be()? as usize;
 
-    let data_bytes = r.read_bytes(length)?;
+    // The length field includes the 8-byte TLV header (flags + type + length).
+    let data_length = raw_length.saturating_sub(8);
+    let data_bytes = r.read_bytes(data_length)?;
 
     // Container if flags bit 1 is set (flags == 2 or 3)
     let is_container = flags & 0x02 != 0;
@@ -725,6 +727,14 @@ fn parse_leaf(obj_type: u16, data: &[u8]) -> Result<XmrObjectData, FormatError> 
 mod tests {
     use super::*;
 
+    /// Write a TLV header: flags(2) + type(2) + length(4), where length includes
+    /// the 8-byte header itself.
+    fn write_tlv_header(buf: &mut Vec<u8>, flags: u16, obj_type: u16, data_len: usize) {
+        buf.extend_from_slice(&flags.to_be_bytes());
+        buf.extend_from_slice(&obj_type.to_be_bytes());
+        buf.extend_from_slice(&((data_len + 8) as u32).to_be_bytes());
+    }
+
     /// Build a minimal XMR license with a content key and signature.
     fn build_test_xmr() -> Vec<u8> {
         let mut buf = Vec::new();
@@ -746,9 +756,7 @@ mod tests {
         ck_data.extend_from_slice(&(fake_key.len() as u16).to_be_bytes());
         ck_data.extend_from_slice(&fake_key);
 
-        container_data.extend_from_slice(&0u16.to_be_bytes()); // flags (leaf)
-        container_data.extend_from_slice(&0x000Au16.to_be_bytes()); // type
-        container_data.extend_from_slice(&(ck_data.len() as u32).to_be_bytes());
+        write_tlv_header(&mut container_data, 0x0000, 0x000A, ck_data.len());
         container_data.extend_from_slice(&ck_data);
 
         // ECC key object (leaf, type 0x002A)
@@ -758,15 +766,11 @@ mod tests {
         ecc_data.extend_from_slice(&(ecc_key.len() as u16).to_be_bytes());
         ecc_data.extend_from_slice(&ecc_key);
 
-        container_data.extend_from_slice(&0u16.to_be_bytes()); // flags
-        container_data.extend_from_slice(&0x002Au16.to_be_bytes()); // type
-        container_data.extend_from_slice(&(ecc_data.len() as u32).to_be_bytes());
+        write_tlv_header(&mut container_data, 0x0000, 0x002A, ecc_data.len());
         container_data.extend_from_slice(&ecc_data);
 
         // Write outer container
-        buf.extend_from_slice(&0x0002u16.to_be_bytes()); // flags (container)
-        buf.extend_from_slice(&0x0001u16.to_be_bytes()); // type
-        buf.extend_from_slice(&(container_data.len() as u32).to_be_bytes());
+        write_tlv_header(&mut buf, 0x0002, 0x0001, container_data.len());
         buf.extend_from_slice(&container_data);
 
         // Signature object (leaf, type 0x000B) — outside the container
@@ -776,9 +780,7 @@ mod tests {
         sig_data.extend_from_slice(&(sig_bytes.len() as u16).to_be_bytes());
         sig_data.extend_from_slice(&sig_bytes);
 
-        buf.extend_from_slice(&0u16.to_be_bytes()); // flags
-        buf.extend_from_slice(&0x000Bu16.to_be_bytes()); // type
-        buf.extend_from_slice(&(sig_data.len() as u32).to_be_bytes());
+        write_tlv_header(&mut buf, 0x0000, 0x000B, sig_data.len());
         buf.extend_from_slice(&sig_data);
 
         buf

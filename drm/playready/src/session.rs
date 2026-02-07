@@ -267,8 +267,7 @@ impl Session {
 fn build_client_data_xml(group_certificate: &[u8]) -> Vec<u8> {
     let cert_b64 = BASE64.encode(group_certificate);
     let xml = format!(
-        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\
-<Data>\
+        "<Data>\
 <CertificateChains>\
 <CertificateChain> {cert_b64} </CertificateChain>\
 </CertificateChains>\

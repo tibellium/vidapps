@@ -27,3 +27,12 @@ quick-xml = "0.37"
 thiserror = "2"
 
 include_dir = { version = "0.7", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+reqwest = "0.13"
+anyhow = "1"
+
+[[example]]
+name = "get_keys"
+required-features = ["static-devices"]
