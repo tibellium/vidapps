@@ -187,6 +187,13 @@ impl Device {
     }
 
     /**
+        Returns the encryption private key (32 bytes).
+    */
+    pub fn encryption_private_key(&self) -> &[u8; 32] {
+        &self.encryption_key.private_key
+    }
+
+    /**
         Returns the encryption public key (64 bytes, X || Y).
     */
     pub fn encryption_public_key(&self) -> &[u8; 64] {
@@ -194,10 +201,31 @@ impl Device {
     }
 
     /**
+        Returns the signing private key (32 bytes).
+    */
+    pub fn signing_private_key(&self) -> &[u8; 32] {
+        &self.signing_key.private_key
+    }
+
+    /**
         Returns the signing public key (64 bytes, X || Y).
     */
     pub fn signing_public_key(&self) -> &[u8; 64] {
         &self.signing_key.public_key
+    }
+
+    /**
+        Returns the group private key (32 bytes), if present.
+    */
+    pub fn group_private_key(&self) -> Option<&[u8; 32]> {
+        self.group_key.as_ref().map(|kp| &kp.private_key)
+    }
+
+    /**
+        Returns the raw group certificate chain bytes.
+    */
+    pub fn group_certificate_bytes(&self) -> &[u8] {
+        &self.group_certificate
     }
 
     /**
