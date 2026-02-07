@@ -10,27 +10,19 @@ use drm_playready::PlayReadyExt;
 */
 #[derive(Args)]
 pub struct GetKeysCommand {
-    /**
-        Path to the .prd device file.
-    */
+    /// Path to the .prd device file.
     #[arg(short, long)]
     device: PathBuf,
 
-    /**
-        Base64-encoded PSSH box.
-    */
+    /// Base64-encoded PSSH box.
     #[arg(short, long)]
     pssh: String,
 
-    /**
-        License server URL to POST the challenge to.
-    */
+    /// License server URL to POST the challenge to.
     #[arg(short, long)]
     url: String,
 
-    /**
-        Additional HTTP headers in "Key: Value" format. Can be repeated.
-    */
+    /// Additional HTTP headers in "Key: Value" format. Can be repeated.
     #[arg(short = 'H', long = "header")]
     headers: Vec<String>,
 }

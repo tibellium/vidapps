@@ -22,10 +22,14 @@ use crate::device::Device;
 use crate::error::{CdmError, CdmResult};
 use crate::pssh_ext::PlayReadyExt;
 
-/// Global session counter for monotonically-increasing session numbers.
+/**
+    Global session counter for monotonically-increasing session numbers.
+*/
 static SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
 
-/// Ephemeral ECC session key material.
+/**
+    Ephemeral ECC session key material.
+*/
 struct XmlKey {
     /// The ECC keypair — private scalar (kept for potential future use).
     #[allow(dead_code)]
@@ -38,7 +42,9 @@ struct XmlKey {
 }
 
 impl XmlKey {
-    /// Generate a new random session key.
+    /**
+        Generate a new random session key.
+    */
     fn generate() -> Self {
         let scalar = Scalar::random(&mut OsRng);
         let point = (ProjectivePoint::GENERATOR * scalar).to_affine();
@@ -255,7 +261,9 @@ impl Session {
     }
 }
 
-/// Build the client data XML containing the certificate chain and features.
+/**
+    Build the client data XML containing the certificate chain and features.
+*/
 fn build_client_data_xml(group_certificate: &[u8]) -> Vec<u8> {
     let cert_b64 = BASE64.encode(group_certificate);
     let xml = format!(
@@ -275,7 +283,9 @@ fn build_client_data_xml(group_certificate: &[u8]) -> Vec<u8> {
     xml.into_bytes()
 }
 
-/// Build the `<LA>` element of the challenge.
+/**
+    Build the `<LA>` element of the challenge.
+*/
 fn build_la_element(
     protocol_version: u32,
     wrm_header_xml: &str,
@@ -324,7 +334,9 @@ fn build_la_element(
     )
 }
 
-/// Build the `<SignedInfo>` element referencing the LA digest.
+/**
+    Build the `<SignedInfo>` element referencing the LA digest.
+*/
 fn build_signed_info_element(la_digest: &[u8]) -> String {
     let digest_b64 = BASE64.encode(la_digest);
     format!(
@@ -343,7 +355,9 @@ fn build_signed_info_element(la_digest: &[u8]) -> String {
     )
 }
 
-/// Assemble the complete SOAP envelope.
+/**
+    Assemble the complete SOAP envelope.
+*/
 fn build_soap_envelope(
     la_xml: &str,
     signed_info_xml: &str,
@@ -387,7 +401,9 @@ xmlns:soap=\"{soap_ns}\">\
     )
 }
 
-/// Extract base64-encoded license blobs from a SOAP license response.
+/**
+    Extract base64-encoded license blobs from a SOAP license response.
+*/
 fn extract_license_blobs(xml: &str) -> CdmResult<Vec<String>> {
     use quick_xml::Reader;
     use quick_xml::events::Event;
@@ -439,7 +455,9 @@ fn extract_license_blobs(xml: &str) -> CdmResult<Vec<String>> {
     Ok(licenses)
 }
 
-/// Check for SOAP faults in the response XML.
+/**
+    Check for SOAP faults in the response XML.
+*/
 fn check_soap_fault(xml: &str) -> CdmResult<()> {
     use quick_xml::Reader;
     use quick_xml::events::Event;
@@ -487,7 +505,9 @@ fn check_soap_fault(xml: &str) -> CdmResult<()> {
     Ok(())
 }
 
-/// Extract the local name from a possibly namespace-prefixed tag.
+/**
+    Extract the local name from a possibly namespace-prefixed tag.
+*/
 fn local_name(name: &[u8]) -> &[u8] {
     match name.iter().position(|&b| b == b':') {
         Some(pos) => &name[pos + 1..],
@@ -495,7 +515,9 @@ fn local_name(name: &[u8]) -> &[u8] {
     }
 }
 
-/// Extract a content key from an XMR ContentKeyObject.
+/**
+    Extract a content key from an XMR ContentKeyObject.
+*/
 fn extract_content_key(
     ck_obj: &drm_playready_format::xmr::ContentKeyObject,
     xmr: &XmrLicense,
@@ -508,7 +530,9 @@ fn extract_content_key(
     }
 }
 
-/// Standard key extraction: ElGamal decrypt → split into CI and CK.
+/**
+    Standard key extraction: ElGamal decrypt → split into CI and CK.
+*/
 fn extract_standard_key(
     ck_obj: &drm_playready_format::xmr::ContentKeyObject,
     xmr: &XmrLicense,
@@ -535,7 +559,9 @@ fn extract_standard_key(
     })
 }
 
-/// Scalable key extraction: ElGamal decrypt → interleaved split → AES-ECB chain.
+/**
+    Scalable key extraction: ElGamal decrypt → interleaved split → AES-ECB chain.
+*/
 fn extract_scalable_key(
     ck_obj: &drm_playready_format::xmr::ContentKeyObject,
     xmr: &XmrLicense,
@@ -630,7 +656,9 @@ fn extract_scalable_key(
     })
 }
 
-/// Verify XMR license integrity using AES-CMAC.
+/**
+    Verify XMR license integrity using AES-CMAC.
+*/
 fn verify_license_integrity(xmr: &XmrLicense, integrity_key: &[u8; 16]) -> CdmResult<()> {
     let sig_obj = xmr.find_signature().ok_or(CdmError::IntegrityCheckFailed)?;
 

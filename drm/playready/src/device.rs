@@ -11,7 +11,9 @@ use crate::types::SecurityLevel;
 
 const MAGIC: &[u8] = b"PRD";
 
-/// An ECC P-256 keypair (32-byte private scalar + 64-byte uncompressed public point).
+/**
+    An ECC P-256 keypair (32-byte private scalar + 64-byte uncompressed public point).
+*/
 #[derive(Debug, Clone)]
 pub(crate) struct EccKeyPair {
     pub private_key: [u8; 32],
@@ -205,7 +207,9 @@ impl Device {
         self.group_key.is_some()
     }
 
-    /// PRD v2: cert_len(4) + cert + enc_key(96) + sign_key(96)
+    /**
+        PRD v2: cert_len(4) + cert + enc_key(96) + sign_key(96)
+    */
     fn parse_v2(r: &mut Reader<'_>) -> CdmResult<Self> {
         let cert_len = r.read_u32be().map_err(|_| CdmError::PrdTruncated)? as usize;
         let cert_bytes = r.read_bytes(cert_len).map_err(|_| CdmError::PrdTruncated)?;
@@ -223,7 +227,9 @@ impl Device {
         })
     }
 
-    /// PRD v3: group_key(96) + enc_key(96) + sign_key(96) + cert_len(4) + cert
+    /**
+        PRD v3: group_key(96) + enc_key(96) + sign_key(96) + cert_len(4) + cert
+    */
     fn parse_v3(r: &mut Reader<'_>) -> CdmResult<Self> {
         let group_key = read_ecc_keypair(r)?;
         let encryption_key = read_ecc_keypair(r)?;
@@ -247,7 +253,9 @@ impl Device {
     }
 }
 
-/// Derive a full ECC keypair from a 32-byte private scalar via P-256 basepoint multiplication.
+/**
+    Derive a full ECC keypair from a 32-byte private scalar via P-256 basepoint multiplication.
+*/
 fn derive_keypair(private_key: [u8; 32]) -> CdmResult<EccKeyPair> {
     // Reject zero scalar (identity point is not a valid public key)
     if private_key == [0u8; 32] {
@@ -276,7 +284,9 @@ fn derive_keypair(private_key: [u8; 32]) -> CdmResult<EccKeyPair> {
     })
 }
 
-/// Split a 96-byte buffer into an ECC keypair (32 private + 64 public).
+/**
+    Split a 96-byte buffer into an ECC keypair (32 private + 64 public).
+*/
 fn split_keypair(buf: [u8; 96]) -> EccKeyPair {
     let mut private_key = [0u8; 32];
     let mut public_key = [0u8; 64];
@@ -288,7 +298,9 @@ fn split_keypair(buf: [u8; 96]) -> EccKeyPair {
     }
 }
 
-/// Read a 96-byte ECC keypair (32 private + 64 public) from the reader.
+/**
+    Read a 96-byte ECC keypair (32 private + 64 public) from the reader.
+*/
 fn read_ecc_keypair(r: &mut Reader<'_>) -> CdmResult<EccKeyPair> {
     let private_key = r.read_array::<32>().map_err(|_| CdmError::PrdTruncated)?;
     let public_key = r.read_array::<64>().map_err(|_| CdmError::PrdTruncated)?;
@@ -298,7 +310,9 @@ fn read_ecc_keypair(r: &mut Reader<'_>) -> CdmResult<EccKeyPair> {
     })
 }
 
-/// Extract the security level from a raw BCertChain by parsing and reading the leaf cert.
+/**
+    Extract the security level from a raw BCertChain by parsing and reading the leaf cert.
+*/
 fn extract_security_level(cert_bytes: &[u8]) -> CdmResult<SecurityLevel> {
     let chain = BCertChain::from_bytes(cert_bytes).map_err(CdmError::from)?;
     let leaf = chain
