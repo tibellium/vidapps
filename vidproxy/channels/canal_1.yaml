@@ -114,8 +114,8 @@ content:
     - name: "start_player"
       kind: Automation
       steps:
-        - kind: Click
-          selector: ".screen-status-bar" # This is inside an iframe
+        - kind: ClickIframe
+          selector: "iframe"
           wait_for:
             delay: 0.5
 
