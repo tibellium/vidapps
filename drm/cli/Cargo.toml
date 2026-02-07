@@ -15,5 +15,5 @@ hex = "0.4"
 rsa = "0.9"
 
 [[bin]]
-name = "wdv3"
+name = "drm-cli"
 path = "src/main.rs"

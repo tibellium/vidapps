@@ -2,14 +2,14 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
-use rsa::{pkcs1::DecodeRsaPrivateKey, pkcs8::DecodePrivateKey, traits::PublicKeyParts};
 use drm_widevine::proto::Message;
+use rsa::{pkcs1::DecodeRsaPrivateKey, pkcs8::DecodePrivateKey, traits::PublicKeyParts};
 
 /**
     Create a .wvd device file from raw credential files.
 */
 #[derive(Args)]
-pub struct CreateCommand {
+pub struct CreateDeviceCommand {
     /// RSA private key file (PEM or DER, PKCS#1 or PKCS#8).
     #[arg(short, long)]
     key: PathBuf,
@@ -31,7 +31,7 @@ pub struct CreateCommand {
     output: Option<PathBuf>,
 }
 
-impl CreateCommand {
+impl CreateDeviceCommand {
     pub fn run(self) -> Result<()> {
         // Parse the RSA private key (try PEM then DER, PKCS#8 then PKCS#1)
         let key_data = std::fs::read(&self.key).context("failed to read private key file")?;
@@ -46,7 +46,8 @@ impl CreateCommand {
         eprintln!("Loaded ClientIdentification ({} bytes)", cid_data.len());
 
         // Build the device
-        let device = drm_widevine::Device::new(self.device_type, self.level, private_key, client_id);
+        let device =
+            drm_widevine::Device::new(self.device_type, self.level, private_key, client_id);
 
         // Determine output path
         let output_path = match &self.output {

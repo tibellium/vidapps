@@ -7,12 +7,12 @@ use clap::Args;
     Inspect a WVD device file.
 */
 #[derive(Args)]
-pub struct DeviceCommand {
+pub struct InspectDeviceCommand {
     /// Path to the .wvd file.
     pub path: PathBuf,
 }
 
-impl DeviceCommand {
+impl InspectDeviceCommand {
     pub fn run(self) -> Result<()> {
         let data = std::fs::read(&self.path).context("failed to read WVD file")?;
         let device = drm_widevine::Device::from_bytes(&data).context("failed to parse WVD file")?;

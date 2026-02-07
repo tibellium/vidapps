@@ -1,13 +1,13 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::commands::{CreateCommand, DeviceCommand, KeysCommand, PsshCommand};
+use crate::commands::{InspectPsshCommand, WidevineCommand};
 
 /**
-    Widevine L3 CDM command-line tool.
+    DRM command-line tool.
 */
 #[derive(Parser)]
-#[command(name = "wdv3")]
+#[command(name = "drm-cli")]
 pub struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -15,19 +15,17 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    Device(DeviceCommand),
-    Pssh(PsshCommand),
-    Create(CreateCommand),
-    Keys(KeysCommand),
+    /// Widevine DRM commands.
+    Widevine(WidevineCommand),
+    /// Inspect a PSSH box.
+    InspectPssh(InspectPsshCommand),
 }
 
 impl Cli {
     pub async fn run(self) -> Result<()> {
         match self.command {
-            Command::Device(cmd) => cmd.run(),
-            Command::Pssh(cmd) => cmd.run(),
-            Command::Create(cmd) => cmd.run(),
-            Command::Keys(cmd) => cmd.run().await,
+            Command::Widevine(cmd) => cmd.run().await,
+            Command::InspectPssh(cmd) => cmd.run(),
         }
     }
 }

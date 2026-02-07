@@ -7,7 +7,7 @@ use clap::Args;
     Acquire content decryption keys from a license server.
 */
 #[derive(Args)]
-pub struct KeysCommand {
+pub struct GetKeysCommand {
     /**
         Path to the .wvd device file.
     */
@@ -47,11 +47,12 @@ pub struct KeysCommand {
     headers: Vec<String>,
 }
 
-impl KeysCommand {
+impl GetKeysCommand {
     pub async fn run(self) -> Result<()> {
         // Load device
         let wvd_data = std::fs::read(&self.device).context("failed to read WVD file")?;
-        let device = drm_widevine::Device::from_bytes(&wvd_data).context("failed to parse WVD file")?;
+        let device =
+            drm_widevine::Device::from_bytes(&wvd_data).context("failed to parse WVD file")?;
 
         eprintln!(
             "Loaded device: {} {}",
@@ -88,7 +89,8 @@ impl KeysCommand {
         }
 
         // Parse PSSH and build challenge
-        let pssh = drm_widevine::PsshBox::from_base64(&self.pssh).context("failed to parse PSSH box")?;
+        let pssh =
+            drm_widevine::PsshBox::from_base64(&self.pssh).context("failed to parse PSSH box")?;
 
         let challenge = session
             .build_license_challenge(&pssh, self.license_type)

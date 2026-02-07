@@ -1,9 +1,5 @@
-mod create;
-mod device;
-mod keys;
-mod pssh;
+mod inspect_pssh;
+pub mod widevine;
 
-pub use self::create::CreateCommand;
-pub use self::device::DeviceCommand;
-pub use self::keys::KeysCommand;
-pub use self::pssh::PsshCommand;
+pub use self::inspect_pssh::InspectPsshCommand;
+pub use self::widevine::WidevineCommand;

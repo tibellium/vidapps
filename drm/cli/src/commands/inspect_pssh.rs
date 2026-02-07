@@ -6,12 +6,12 @@ use drm_widevine::WidevineExt;
     Inspect a PSSH box.
 */
 #[derive(Args)]
-pub struct PsshCommand {
+pub struct InspectPsshCommand {
     /// Base64-encoded PSSH box.
     pub base64: String,
 }
 
-impl PsshCommand {
+impl InspectPsshCommand {
     pub fn run(self) -> Result<()> {
         let pssh =
             drm_widevine::PsshBox::from_base64(&self.base64).context("failed to parse PSSH box")?;
