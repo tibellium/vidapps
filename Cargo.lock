@@ -7606,9 +7606,12 @@ dependencies = [
  "anyhow",
  "clap",
  "hex",
+ "prost",
  "reqwest 0.13.1",
+ "rsa",
  "tokio",
  "wdv3",
+ "wdv3-proto",
 ]
 
 [[package]]

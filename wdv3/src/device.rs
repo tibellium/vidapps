@@ -29,6 +29,23 @@ pub struct Device {
 
 impl Device {
     /**
+        Create a new device from its raw components.
+    */
+    pub fn new(
+        device_type: DeviceType,
+        security_level: SecurityLevel,
+        private_key: RsaPrivateKey,
+        client_id: ClientIdentification,
+    ) -> Self {
+        Self {
+            device_type,
+            security_level,
+            private_key,
+            client_id,
+        }
+    }
+
+    /**
         Returns the parsed RSA private key.
     */
     pub fn private_key(&self) -> &RsaPrivateKey {
