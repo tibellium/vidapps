@@ -643,6 +643,18 @@ impl BCert {
     }
 
     /**
+        Get the first key matching the given usage value.
+    */
+    pub fn key_by_usage(&self, usage: u32) -> Option<&[u8]> {
+        self.key_info().and_then(|ki| {
+            ki.keys
+                .iter()
+                .find(|k| k.usages.contains(&usage))
+                .map(|k| k.key.as_slice())
+        })
+    }
+
+    /**
         Get the first key with `Sign` (1) usage.
     */
     pub fn signing_key(&self) -> Option<&[u8]> {

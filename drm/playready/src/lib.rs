@@ -2,6 +2,7 @@
 
 pub use drm_core as core;
 
+mod cert;
 mod constants;
 mod crypto;
 mod device;

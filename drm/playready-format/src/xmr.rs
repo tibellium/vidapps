@@ -411,6 +411,126 @@ impl XmrLicense {
     }
 
     /**
+        Find the expiration restriction object.
+    */
+    pub fn find_expiration(&self) -> Option<&ExpirationObject> {
+        self.find_objects(object_type::EXPIRATION)
+            .into_iter()
+            .find_map(|o| match &o.data {
+                XmrObjectData::Expiration(e) => Some(e),
+                _ => None,
+            })
+    }
+
+    /**
+        Find the output protection level restriction object.
+    */
+    pub fn find_output_protection(&self) -> Option<&OutputProtectionObject> {
+        self.find_objects(object_type::OUTPUT_PROTECTION)
+            .into_iter()
+            .find_map(|o| match &o.data {
+                XmrObjectData::OutputProtection(op) => Some(op),
+                _ => None,
+            })
+    }
+
+    /**
+        Find the minimum security level object.
+    */
+    pub fn find_security_level(&self) -> Option<&SecurityLevelObject> {
+        self.find_objects(object_type::SECURITY_LEVEL)
+            .into_iter()
+            .find_map(|o| match &o.data {
+                XmrObjectData::SecurityLevel(sl) => Some(sl),
+                _ => None,
+            })
+    }
+
+    /**
+        Find the issue date object.
+    */
+    pub fn find_issue_date(&self) -> Option<&IssueDateObject> {
+        self.find_objects(object_type::ISSUEDATE)
+            .into_iter()
+            .find_map(|o| match &o.data {
+                XmrObjectData::IssueDate(id) => Some(id),
+                _ => None,
+            })
+    }
+
+    /**
+        Find the domain restriction object.
+    */
+    pub fn find_domain_restriction(&self) -> Option<&DomainRestrictionObject> {
+        self.find_objects(object_type::DOMAIN_ID)
+            .into_iter()
+            .find_map(|o| match &o.data {
+                XmrObjectData::DomainRestriction(dr) => Some(dr),
+                _ => None,
+            })
+    }
+
+    /**
+        Find the expiration-after-first-play object.
+    */
+    pub fn find_expiration_after_first_play(&self) -> Option<&ExpirationAfterFirstPlayObject> {
+        self.find_objects(object_type::EXPIRATION_AFTER_FIRSTPLAY)
+            .into_iter()
+            .find_map(|o| match &o.data {
+                XmrObjectData::ExpirationAfterFirstPlay(e) => Some(e),
+                _ => None,
+            })
+    }
+
+    /**
+        Find the grace period object.
+    */
+    pub fn find_grace_period(&self) -> Option<&GracePeriodObject> {
+        self.find_objects(object_type::GRACE_PERIOD)
+            .into_iter()
+            .find_map(|o| match &o.data {
+                XmrObjectData::GracePeriod(gp) => Some(gp),
+                _ => None,
+            })
+    }
+
+    /**
+        Find the removal date object.
+    */
+    pub fn find_removal_date(&self) -> Option<&RemovalDateObject> {
+        self.find_objects(object_type::REMOVAL_DATE)
+            .into_iter()
+            .find_map(|o| match &o.data {
+                XmrObjectData::RemovalDate(rd) => Some(rd),
+                _ => None,
+            })
+    }
+
+    /**
+        Find the metering restriction object.
+    */
+    pub fn find_metering(&self) -> Option<&MeteringRestrictionObject> {
+        self.find_objects(object_type::METERING)
+            .into_iter()
+            .find_map(|o| match &o.data {
+                XmrObjectData::MeteringRestriction(m) => Some(m),
+                _ => None,
+            })
+    }
+
+    /**
+        Find the embedded license settings object.
+    */
+    pub fn find_embedded_license_settings(&self) -> Option<&EmbeddedLicenseSettingsObject> {
+        self.find_objects(object_type::EMBEDDING_BEHAVIOR)
+            .into_iter()
+            .find_map(|o| match &o.data {
+                XmrObjectData::EmbeddedLicenseSettings(e) => Some(e),
+                _ => None,
+            })
+    }
+
+    /**
         Get the bytes that should be CMAC-verified.
 
         This is all raw license bytes except the last `(signature_data_length + 12)` bytes,

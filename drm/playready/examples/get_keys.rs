@@ -72,5 +72,28 @@ async fn main() -> anyhow::Result<()> {
         println!("{key}");
     }
 
+    // Print XMR license metadata
+    for (i, license) in session.licenses().iter().enumerate() {
+        eprintln!("License {i} metadata:");
+        if let Some(exp) = license.find_expiration() {
+            eprintln!(
+                "  Expiration: begin={} end={}",
+                exp.begin_date, exp.end_date
+            );
+        }
+        if let Some(sl) = license.find_security_level() {
+            eprintln!("  Security level: {}", sl.minimum_security_level);
+        }
+        if let Some(issue) = license.find_issue_date() {
+            eprintln!("  Issue date: {}", issue.issue_date);
+        }
+        if let Some(op) = license.find_output_protection() {
+            eprintln!(
+                "  Output protection: compressed={} uncompressed={} analog={}",
+                op.compressed_digital_video, op.uncompressed_digital_video, op.analog_video
+            );
+        }
+    }
+
     Ok(())
 }

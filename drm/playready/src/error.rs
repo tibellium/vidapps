@@ -71,6 +71,8 @@ pub enum CdmError {
     UnsupportedCipherType(String),
     #[error("license integrity check failed")]
     IntegrityCheckFailed,
+    #[error("license response signature invalid: {0}")]
+    LicenseSignatureInvalid(String),
 }
 
 impl From<FormatError> for CdmError {

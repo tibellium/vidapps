@@ -10,6 +10,7 @@ use sha2::{Digest, Sha256};
 
 use drm_core::{ContentKey, KeyType, PsshBox};
 use drm_playready_format::{
+    bcert::{BCertChain, KeyUsage},
     key::CipherType,
     soap,
     wrm_header::{WrmHeader, WrmHeaderVersion, kid_to_uuid},
@@ -85,6 +86,8 @@ pub struct Session {
     xml_key: Option<XmlKey>,
     /// Extracted content keys after a successful parse_license_response().
     content_keys: Vec<ContentKey>,
+    /// Parsed XMR license objects (populated alongside content_keys).
+    xmr_licenses: Vec<XmrLicense>,
 }
 
 impl Session {
@@ -97,6 +100,7 @@ impl Session {
             device,
             xml_key: None,
             content_keys: Vec::new(),
+            xmr_licenses: Vec::new(),
         }
     }
 
@@ -114,6 +118,20 @@ impl Session {
         to a PlayReady license server.
     */
     pub fn build_license_challenge(&mut self, pssh: &PsshBox) -> CdmResult<Vec<u8>> {
+        self.build_license_challenge_with_options(pssh, None)
+    }
+
+    /**
+        Build a license challenge with optional custom data.
+
+        Custom data is application-specific and will be HTML-escaped and
+        included in the challenge XML as a `<CustomData>` element.
+    */
+    pub fn build_license_challenge_with_options(
+        &mut self,
+        pssh: &PsshBox,
+        custom_data: Option<&str>,
+    ) -> CdmResult<Vec<u8>> {
         // 1. Extract WRM header XML from PSSH
         let wrm_header_xml = pssh.playready_wrm_header_xml()?;
         let wrm_header =
@@ -156,6 +174,7 @@ impl Session {
             timestamp,
             &wrmserver_data,
             &encrypted_client_data,
+            custom_data,
         );
 
         // 8. SHA-256 hash the LA element
@@ -192,15 +211,19 @@ impl Session {
         let response_str =
             std::str::from_utf8(raw).map_err(|e| CdmError::InvalidXml(e.to_string()))?;
 
-        // 1. Parse SOAP response and extract license blobs
+        // 1. Verify response signature (best-effort, skipped if not verifiable)
+        verify_license_response_signature(response_str)?;
+
+        // 2. Parse SOAP response and extract license blobs
         let license_blobs = extract_license_blobs(response_str)?;
 
         if license_blobs.is_empty() {
             return Err(CdmError::NoContentKeys);
         }
 
-        // 2. Process each license blob
+        // 3. Process each license blob
         let mut keys = Vec::new();
+        let mut xmr_licenses = Vec::new();
         for blob_b64 in &license_blobs {
             let blob = BASE64
                 .decode(blob_b64.as_bytes())
@@ -208,17 +231,19 @@ impl Session {
 
             let xmr = XmrLicense::from_bytes(&blob).map_err(|e| CdmError::Format(e.to_string()))?;
 
-            // 3. Verify device key matches
+            // 4. Verify device key matches
             if let Some(ecc_key) = xmr.find_ecc_key()
                 && ecc_key.key.as_slice() != self.device.encryption_public_key().as_slice()
             {
                 return Err(CdmError::DeviceKeyMismatch);
             }
 
-            // 4. Extract content keys
+            // 5. Extract content keys
             for ck_obj in xmr.find_content_keys() {
                 keys.push(extract_content_key(ck_obj, &xmr, &self.device)?);
             }
+
+            xmr_licenses.push(xmr);
         }
 
         if keys.is_empty() {
@@ -226,6 +251,7 @@ impl Session {
         }
 
         self.content_keys = keys;
+        self.xmr_licenses = xmr_licenses;
         Ok(&self.content_keys)
     }
 
@@ -234,6 +260,16 @@ impl Session {
     */
     pub fn keys(&self) -> &[ContentKey] {
         &self.content_keys
+    }
+
+    /**
+        Returns all parsed XMR licenses (empty until `parse_license_response` succeeds).
+
+        Use the convenience finders on [`XmrLicense`] to inspect metadata such as
+        expiration, output protection, security level, etc.
+    */
+    pub fn licenses(&self) -> &[XmrLicense] {
+        &self.xmr_licenses
     }
 
     /**
@@ -292,10 +328,16 @@ fn build_la_element(
     timestamp: u64,
     wrmserver_data: &[u8; 128],
     encrypted_client_data: &[u8],
+    custom_data: Option<&str>,
 ) -> String {
     let nonce_b64 = BASE64.encode(nonce);
     let wrmserver_b64 = BASE64.encode(wrmserver_data);
     let client_data_b64 = BASE64.encode(encrypted_client_data);
+
+    let custom_data_xml = match custom_data {
+        Some(data) => format!("<CustomData>{}</CustomData>", html_escape(data)),
+        None => String::new(),
+    };
 
     format!(
         "<LA xmlns=\"{protocol_ns}\" Id=\"SignedData\" xml:space=\"preserve\">\
@@ -304,6 +346,7 @@ fn build_la_element(
 <CLIENTINFO>\
 <CLIENTVERSION>{client_version}</CLIENTVERSION>\
 </CLIENTINFO>\
+{custom_data_xml}\
 <LicenseNonce>{nonce_b64}</LicenseNonce>\
 <ClientTime>{timestamp}</ClientTime>\
 <EncryptedData xmlns=\"{xmlenc_ns}\" Type=\"{xmlenc_ns}Element\">\
@@ -398,6 +441,229 @@ xmlns:soap=\"{soap_ns}\">\
         message_ns = soap::MESSAGE_NS,
         xmldsig_ns = soap::XMLDSIG_NS,
     )
+}
+
+/**
+    HTML-escape a string for embedding in XML.
+*/
+fn html_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/**
+    Attempt to verify the license response signature.
+
+    This is best-effort: if the response contains a `<SigningCertificateChain>`,
+    `<Signature>`, and `<SignedInfo>` with `<DigestValue>` and `<SignatureValue>`,
+    the signature is verified. If any of these elements are missing, verification
+    is silently skipped (matching the reference impl `is_verifiable()` behavior).
+*/
+fn verify_license_response_signature(xml: &str) -> CdmResult<()> {
+    // Extract <LicenseResponse> — if absent, skip verification
+    let Some(license_response_xml) = extract_xml_element(xml, "LicenseResponse") else {
+        return Ok(());
+    };
+
+    // All further lookups are scoped to within <LicenseResponse>
+    let Some(signing_chain_b64) =
+        extract_xml_text(&license_response_xml, "SigningCertificateChain")
+    else {
+        return Ok(());
+    };
+
+    // Extract <Signature> element within <LicenseResponse>, then scope
+    // DigestValue/SignatureValue/SignedInfo to within it
+    let Some(signature_xml) = extract_xml_element(&license_response_xml, "Signature") else {
+        return Ok(());
+    };
+    let Some(signed_info_xml) = extract_xml_element(&signature_xml, "SignedInfo") else {
+        return Ok(());
+    };
+    let Some(digest_value_b64) = extract_xml_text(&signature_xml, "DigestValue") else {
+        return Ok(());
+    };
+    let Some(signature_value_b64) = extract_xml_text(&signature_xml, "SignatureValue") else {
+        return Ok(());
+    };
+
+    // 1. Parse the signing certificate chain
+    let chain_bytes = BASE64
+        .decode(signing_chain_b64.trim().as_bytes())
+        .map_err(|e| CdmError::InvalidBase64(format!("SigningCertificateChain: {e}")))?;
+    let chain =
+        BCertChain::from_bytes(&chain_bytes).map_err(|e| CdmError::Format(e.to_string()))?;
+
+    // 2. Verify the certificate chain
+    crate::cert::verify_chain(&chain)?;
+
+    // 3. Get the leaf cert's SIGN_RESPONSE key
+    let leaf = chain.certificates.first().ok_or_else(|| {
+        CdmError::LicenseSignatureInvalid("signing chain has no certificates".into())
+    })?;
+    let sign_response_key = leaf
+        .key_by_usage(KeyUsage::SignResponse.to_u32())
+        .ok_or_else(|| {
+            CdmError::LicenseSignatureInvalid("signing chain leaf has no SignResponse key".into())
+        })?;
+    let signing_key: [u8; 64] = sign_response_key.try_into().map_err(|_| {
+        CdmError::LicenseSignatureInvalid(format!(
+            "SignResponse key is not 64 bytes (got {})",
+            sign_response_key.len()
+        ))
+    })?;
+
+    // 4. Verify digest: SHA-256 of <LicenseResponse> must match <DigestValue>
+    let response_hash = Sha256::digest(license_response_xml.as_bytes());
+    let digest_value = BASE64
+        .decode(digest_value_b64.trim().as_bytes())
+        .map_err(|e| CdmError::InvalidBase64(format!("DigestValue: {e}")))?;
+
+    if response_hash.as_slice() != digest_value.as_slice() {
+        return Err(CdmError::LicenseSignatureInvalid(
+            "license response digest mismatch".into(),
+        ));
+    }
+
+    // 5. Verify ECDSA signature over <SignedInfo>
+    let signature_bytes = BASE64
+        .decode(signature_value_b64.trim().as_bytes())
+        .map_err(|e| CdmError::InvalidBase64(format!("SignatureValue: {e}")))?;
+
+    signing::ecdsa_sha256_verify(&signing_key, signed_info_xml.as_bytes(), &signature_bytes)
+        .map_err(|_| {
+            CdmError::LicenseSignatureInvalid("ECDSA signature verification failed".into())
+        })?;
+
+    Ok(())
+}
+
+/**
+    Extract the text content of the first element with the given local name.
+*/
+fn extract_xml_text(xml: &str, tag_name: &str) -> Option<String> {
+    use quick_xml::Reader;
+    use quick_xml::events::Event;
+
+    let mut reader = Reader::from_str(xml);
+    let mut in_target = false;
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(e)) => {
+                let name = e.name();
+                let local = local_name(name.as_ref());
+                if local == tag_name.as_bytes() {
+                    in_target = true;
+                }
+            }
+            Ok(Event::End(e)) => {
+                let name = e.name();
+                let local = local_name(name.as_ref());
+                if local == tag_name.as_bytes() && in_target {
+                    return None; // empty element
+                }
+            }
+            Ok(Event::Text(e)) if in_target => {
+                return e.unescape().ok().map(|s| s.to_string());
+            }
+            Ok(Event::Eof) => return None,
+            Err(_) => return None,
+            _ => {}
+        }
+    }
+}
+
+/**
+    Extract the raw XML of the first element with the given local name,
+    including the element's start and end tags.
+*/
+fn extract_xml_element(xml: &str, tag_name: &str) -> Option<String> {
+    // Use byte-level search for the element boundaries.
+    // This preserves the exact XML serialization for hashing.
+    let tag_bytes = tag_name.as_bytes();
+
+    // Find opening tag: look for `<TagName` or `<prefix:TagName`
+    let start_pos = find_element_start(xml, tag_bytes)?;
+
+    // Find the matching closing tag
+    let close_tag_short = format!("</{tag_name}>");
+    let close_pos_short = xml[start_pos..].find(&close_tag_short);
+
+    // Also try with any namespace prefix
+    let close_pos = if let Some(pos) = close_pos_short {
+        start_pos + pos + close_tag_short.len()
+    } else {
+        // Try finding </prefix:TagName>
+        let close_pattern = format!(":{tag_name}>");
+        let search_start = start_pos;
+        let mut pos = search_start;
+        loop {
+            let remaining = &xml[pos..];
+            let idx = remaining.find(&close_pattern)?;
+            let close_start = pos + idx;
+            // Walk back to find the '</'
+            let before = &xml[..close_start];
+            let slash_pos = before.rfind("</")?;
+            pos = close_start + close_pattern.len();
+            // Verify this is actually a closing tag for our element
+            let between = &xml[slash_pos + 2..close_start];
+            if between.ends_with(':') || between.is_empty() {
+                return Some(xml[start_pos..pos].to_string());
+            }
+        }
+    };
+
+    Some(xml[start_pos..close_pos].to_string())
+}
+
+/**
+    Find the byte offset of the start of an element with the given local name.
+*/
+fn find_element_start(xml: &str, tag_name: &[u8]) -> Option<usize> {
+    let tag_str = std::str::from_utf8(tag_name).ok()?;
+    let mut search_pos = 0;
+
+    loop {
+        let remaining = &xml[search_pos..];
+
+        // Try bare tag: `<TagName`
+        if let Some(idx) = remaining.find(&format!("<{tag_str}")) {
+            let after = remaining.as_bytes().get(idx + 1 + tag_str.len())?;
+            if *after == b' ' || *after == b'>' || *after == b'/' {
+                return Some(search_pos + idx);
+            }
+            search_pos += idx + 1;
+            continue;
+        }
+
+        // Try prefixed tag: `<prefix:TagName`
+        let pattern = format!(":{tag_str}");
+        if let Some(idx) = remaining.find(&pattern) {
+            let after_pos = idx + pattern.len();
+            let after = remaining.as_bytes().get(after_pos)?;
+            if *after == b' ' || *after == b'>' || *after == b'/' {
+                // Walk back to find the '<'
+                let before = &xml[..search_pos + idx];
+                let lt_pos = before.rfind('<')?;
+                return Some(lt_pos);
+            }
+            search_pos += idx + 1;
+            continue;
+        }
+
+        return None;
+    }
 }
 
 /**
@@ -732,6 +998,7 @@ mod tests {
             1700000000,
             &wrmserver,
             &client_data,
+            None,
         );
 
         assert!(la.contains("<Version>5</Version>"));
@@ -745,6 +1012,42 @@ mod tests {
         assert!(la.contains("WMRMServer"));
         assert!(la.contains(soap::ECC256_ALGORITHM));
         assert!(la.contains(soap::AES128_CBC_ALGORITHM));
+    }
+
+    #[test]
+    fn build_la_element_with_custom_data() {
+        let nonce = [0xAA; 16];
+        let wrmserver = [0xBB; 128];
+        let client_data = vec![0xCC; 32];
+        let la = build_la_element(
+            5,
+            "<WRMHEADER/>",
+            &nonce,
+            1700000000,
+            &wrmserver,
+            &client_data,
+            Some("test<data>&more"),
+        );
+
+        assert!(la.contains("<CustomData>test&lt;data&gt;&amp;more</CustomData>"));
+    }
+
+    #[test]
+    fn build_la_element_without_custom_data_has_no_tag() {
+        let nonce = [0xAA; 16];
+        let wrmserver = [0xBB; 128];
+        let client_data = vec![0xCC; 32];
+        let la = build_la_element(
+            5,
+            "<WRMHEADER/>",
+            &nonce,
+            1700000000,
+            &wrmserver,
+            &client_data,
+            None,
+        );
+
+        assert!(!la.contains("CustomData"));
     }
 
     #[test]
