@@ -116,11 +116,12 @@ content:
   outputs:
     manifest_url: "${{get_manifest.manifest_url}}"
     headers:
-      Referer: "https://mdstrm.com/"
-      Origin: "https://mdstrm.com"
-      Accept: "*/*"
-      Accept-Language: "en-US,en;q=0.9"
-      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+      Referer: "${{get_manifest.referer}}"
+      Origin: "${{get_manifest.origin}}"
+      Accept: "${{get_manifest.accept}}"
+      Accept-Language: "${{get_manifest.accept_language}}"
+      User-Agent: "${{get_manifest.user_agent}}"
+      Cookie: "${{get_manifest.cookie}}"
 
   steps:
     - name: "go_live"
@@ -166,3 +167,21 @@ content:
       extract:
         manifest_url:
           kind: url
+        referer:
+          kind: header
+          path: "referer"
+        origin:
+          kind: header
+          path: "origin"
+        accept:
+          kind: header
+          path: "accept"
+        accept_language:
+          kind: header
+          path: "accept-language"
+        user_agent:
+          kind: header
+          path: "user-agent"
+        cookie:
+          kind: header
+          path: "cookie"

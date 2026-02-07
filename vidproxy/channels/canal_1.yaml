@@ -123,25 +123,25 @@ content:
       kind: Sniff
       request:
         url: "cdn\\.mdstrm\\.com/.*/media_1000\\.m3u8(\\?.*)?"
-        timeout: 120.0
+        timeout: 60.0
       extract:
         manifest_url:
           kind: url
         referer:
-          kind: request_header
+          kind: header
           path: "referer"
         origin:
-          kind: request_header
+          kind: header
           path: "origin"
         accept:
-          kind: request_header
+          kind: header
           path: "accept"
         accept_language:
-          kind: request_header
+          kind: header
           path: "accept-language"
         user_agent:
-          kind: request_header
+          kind: header
           path: "user-agent"
         cookie:
-          kind: request_header
+          kind: header
           path: "cookie"
