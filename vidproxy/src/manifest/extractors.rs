@@ -1,7 +1,10 @@
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 use anyhow::{Result, anyhow};
 use regex::Regex;
+use scraper::{ElementRef, Html, Selector};
+use sxd_xpath::nodeset::Node;
 
 use super::types::{Extractor, ExtractorKind};
 
@@ -23,7 +26,10 @@ pub fn extract(extractor: &Extractor, content: &str, url: &str) -> Result<String
             Err(anyhow!("Use extract_array() for jsonpath_array extractors"))
         }
         ExtractorKind::JsonPathRegex => extract_jsonpath_regex(extractor, content),
+        ExtractorKind::Css => extract_css(extractor, content),
+        ExtractorKind::CssArray => Err(anyhow!("Use extract_array() for css_array extractors")),
         ExtractorKind::XPath => extract_xpath(extractor, content),
+        ExtractorKind::XPathArray => Err(anyhow!("Use extract_array() for xpath_array extractors")),
         ExtractorKind::Regex => extract_regex(extractor, content),
         ExtractorKind::RegexArray => Err(anyhow!("Use extract_array() for regex_array extractors")),
         ExtractorKind::Line => extract_line(content),
@@ -75,10 +81,13 @@ fn unescape_json_string(s: &str) -> String {
     nested array paths like `$.result[*].content.epg[*]`.
 */
 pub fn extract_array(extractor: &Extractor, content: &str) -> Result<ExtractedArray> {
-    if extractor.kind != ExtractorKind::JsonPathArray && extractor.kind != ExtractorKind::RegexArray
+    if extractor.kind != ExtractorKind::JsonPathArray
+        && extractor.kind != ExtractorKind::RegexArray
+        && extractor.kind != ExtractorKind::XPathArray
+        && extractor.kind != ExtractorKind::CssArray
     {
         return Err(anyhow!(
-            "extract_array() only works with jsonpath_array or regex_array extractors"
+            "extract_array() only works with jsonpath_array, regex_array, xpath_array, or css_array extractors"
         ));
     }
 
@@ -97,6 +106,8 @@ pub fn extract_array(extractor: &Extractor, content: &str) -> Result<ExtractedAr
             extract_jsonpath_array(content, path, each)
         }
         ExtractorKind::RegexArray => extract_regex_array(extractor, content),
+        ExtractorKind::XPathArray => extract_xpath_array(extractor, content),
+        ExtractorKind::CssArray => extract_css_array(extractor, content),
         _ => unreachable!("checked above"),
     }
 }
@@ -413,8 +424,7 @@ fn extract_xpath(extractor: &Extractor, content: &str) -> Result<String> {
         .as_ref()
         .ok_or_else(|| anyhow!("XPath extractor requires 'path'"))?;
 
-    let package = sxd_document::parser::parse(content)
-        .map_err(|e| anyhow!("Failed to parse XML: {:?}", e))?;
+    let package = parse_xpath_document(content)?;
     let document = package.as_document();
 
     let factory = sxd_xpath::Factory::new();
@@ -440,6 +450,386 @@ fn extract_xpath(extractor: &Extractor, content: &str) -> Result<String> {
             let node = nodes.iter().next().unwrap();
             Ok(node.string_value())
         }
+    }
+}
+
+/**
+    Extract multiple matches using XPath, returning an array of objects.
+*/
+fn extract_xpath_array(extractor: &Extractor, content: &str) -> Result<ExtractedArray> {
+    let path = extractor
+        .path
+        .as_ref()
+        .ok_or_else(|| anyhow!("xpath_array extractor requires 'path'"))?;
+
+    let each = extractor
+        .each
+        .as_ref()
+        .ok_or_else(|| anyhow!("xpath_array extractor requires 'each'"))?;
+
+    let package = parse_xpath_document(content)?;
+    let document = package.as_document();
+
+    let factory = sxd_xpath::Factory::new();
+    let xpath = factory
+        .build(path)
+        .map_err(|e| anyhow!("Invalid XPath '{}': {:?}", path, e))?
+        .ok_or_else(|| anyhow!("XPath '{}' is empty", path))?;
+
+    let context = sxd_xpath::Context::new();
+    let value = xpath
+        .evaluate(&context, document.root())
+        .map_err(|e| anyhow!("XPath evaluation failed: {:?}", e))?;
+
+    let nodes = match value {
+        sxd_xpath::Value::Nodeset(nodes) => nodes,
+        _ => {
+            return Err(anyhow!(
+                "XPath '{}' must return a nodeset for xpath_array",
+                path
+            ));
+        }
+    };
+
+    if nodes.size() == 0 {
+        return Err(anyhow!("XPath '{}' returned no nodes", path));
+    }
+
+    let mut extracted = Vec::new();
+
+    for node in nodes.iter() {
+        let mut fields: HashMap<String, Option<String>> = HashMap::new();
+
+        for (field_name, selector) in each {
+            let mut value: Option<String> = None;
+
+            for candidate in selector.split('|').map(|s| s.trim()) {
+                if candidate.is_empty() {
+                    continue;
+                }
+
+                if let Some(const_value) = candidate.strip_prefix("const:") {
+                    value = Some(const_value.to_string());
+                    break;
+                }
+
+                let extracted_value = extract_xpath_value(candidate, node)?;
+                if extracted_value.is_some() {
+                    value = extracted_value;
+                    break;
+                }
+            }
+
+            let value = if extractor.unescape {
+                value.map(|v| unescape_html_string(&v))
+            } else {
+                value
+            };
+
+            fields.insert(field_name.clone(), value);
+        }
+
+        if should_skip_item(&fields) {
+            continue;
+        }
+
+        extracted.push(fields);
+    }
+
+    if extracted.is_empty() {
+        return Err(anyhow!("XPath '{}' returned no results", path));
+    }
+
+    Ok(extracted)
+}
+
+fn extract_xpath_value(path: &str, node: Node) -> Result<Option<String>> {
+    let factory = sxd_xpath::Factory::new();
+    let xpath = factory
+        .build(path)
+        .map_err(|e| anyhow!("Invalid XPath '{}': {:?}", path, e))?
+        .ok_or_else(|| anyhow!("XPath '{}' is empty", path))?;
+
+    let context = sxd_xpath::Context::new();
+    let value = xpath
+        .evaluate(&context, node)
+        .map_err(|e| anyhow!("XPath evaluation failed: {:?}", e))?;
+
+    let result = match value {
+        sxd_xpath::Value::String(s) => s,
+        sxd_xpath::Value::Number(n) => n.to_string(),
+        sxd_xpath::Value::Boolean(b) => b.to_string(),
+        sxd_xpath::Value::Nodeset(nodes) => {
+            if nodes.size() == 0 {
+                return Ok(None);
+            }
+            let node = nodes.iter().next().unwrap();
+            node.string_value()
+        }
+    };
+
+    if result.trim().is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(result))
+    }
+}
+
+fn parse_xpath_document(content: &str) -> Result<sxd_document::Package> {
+    match sxd_document::parser::parse(content) {
+        Ok(package) => Ok(package),
+        Err(_) => {
+            let sanitized = sanitize_html_for_xpath(content);
+            sxd_document::parser::parse(&sanitized)
+                .map_err(|e| anyhow!("Failed to parse XML: {:?}", e))
+        }
+    }
+}
+
+fn sanitize_html_for_xpath(input: &str) -> String {
+    let mut output = input.to_string();
+
+    if let Ok(re) = Regex::new(r"(?is)<!doctype[^>]*>") {
+        output = re.replace_all(&output, "").into_owned();
+    }
+    if let Ok(re) = Regex::new(r"(?is)<script[^>]*>.*?</script>") {
+        output = re.replace_all(&output, "").into_owned();
+    }
+    if let Ok(re) = Regex::new(r"(?is)<style[^>]*>.*?</style>") {
+        output = re.replace_all(&output, "").into_owned();
+    }
+
+    let void_tags = [
+        "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param",
+        "source", "track", "wbr",
+    ];
+
+    for tag in void_tags {
+        if let Ok(re) = Regex::new(&format!(r"(?i)<{}\\b[^>]*?>", tag)) {
+            output = re
+                .replace_all(&output, |caps: &regex::Captures| {
+                    let m = caps.get(0).unwrap().as_str();
+                    if m.ends_with("/>") {
+                        m.to_string()
+                    } else {
+                        let mut s = m.to_string();
+                        if s.ends_with('>') {
+                            s.pop();
+                            s.push_str("/>");
+                        }
+                        s
+                    }
+                })
+                .into_owned();
+        }
+    }
+
+    // Normalize boolean attributes to key="key" to satisfy XML parsing
+    let re = boolean_attr_regex();
+    loop {
+        let next = re
+            .replace_all(&output, |caps: &regex::Captures| {
+                let prefix = caps.get(1).unwrap().as_str();
+                let name = caps.get(2).unwrap().as_str();
+                let suffix = caps.get(3).unwrap().as_str();
+                format!(r#"{} {}="{}"{}"#, prefix, name, name, suffix)
+            })
+            .into_owned();
+
+        if next == output {
+            break;
+        }
+        output = next;
+    }
+
+    output
+}
+
+fn boolean_attr_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r#"(<[^/!][^>]*?)\s([A-Za-z_:][A-Za-z0-9_:.:-]*)(\s|/?>)"#)
+            .expect("boolean attribute regex should compile")
+    })
+}
+
+#[derive(Debug)]
+enum CssTarget {
+    Text,
+    Attr(String),
+}
+
+/**
+    Extract using CSS selectors (HTML).
+    Supports `selector::text` and `selector::attr(name)` suffixes.
+*/
+fn extract_css(extractor: &Extractor, content: &str) -> Result<String> {
+    let path = extractor
+        .path
+        .as_ref()
+        .ok_or_else(|| anyhow!("CSS extractor requires 'path'"))?;
+
+    let (selector, target) = parse_css_path(path)?;
+    let document = Html::parse_document(content);
+
+    let value = if selector.is_empty() {
+        None
+    } else {
+        let selector = Selector::parse(&selector)
+            .map_err(|e| anyhow!("Invalid CSS selector '{}': {:?}", selector, e))?;
+
+        document
+            .select(&selector)
+            .next()
+            .and_then(|element| extract_css_value_from_element(element, &target))
+    };
+
+    if let Some(value) = value {
+        return Ok(value);
+    }
+
+    if let Some(default) = &extractor.default {
+        return Ok(default.clone());
+    }
+
+    Err(anyhow!("CSS selector '{}' returned no results", path))
+}
+
+/**
+    Extract multiple matches using CSS selectors, returning an array of objects.
+*/
+fn extract_css_array(extractor: &Extractor, content: &str) -> Result<ExtractedArray> {
+    let path = extractor
+        .path
+        .as_ref()
+        .ok_or_else(|| anyhow!("css_array extractor requires 'path'"))?;
+
+    let each = extractor
+        .each
+        .as_ref()
+        .ok_or_else(|| anyhow!("css_array extractor requires 'each'"))?;
+
+    if path.contains("::") {
+        return Err(anyhow!(
+            "css_array path '{}' should be a selector without ::text/::attr",
+            path
+        ));
+    }
+
+    let selector =
+        Selector::parse(path).map_err(|e| anyhow!("Invalid CSS selector '{}': {:?}", path, e))?;
+
+    let document = Html::parse_document(content);
+    let mut extracted = Vec::new();
+
+    for element in document.select(&selector) {
+        let mut fields: HashMap<String, Option<String>> = HashMap::new();
+
+        for (field_name, selector_ref) in each {
+            let mut value: Option<String> = None;
+
+            for candidate in selector_ref.split('|').map(|s| s.trim()) {
+                if candidate.is_empty() {
+                    continue;
+                }
+
+                if let Some(const_value) = candidate.strip_prefix("const:") {
+                    value = Some(const_value.to_string());
+                    break;
+                }
+
+                let extracted_value = extract_css_value_from_node(candidate, element);
+                if extracted_value.is_some() {
+                    value = extracted_value;
+                    break;
+                }
+            }
+
+            let value = if extractor.unescape {
+                value.map(|v| unescape_html_string(&v))
+            } else {
+                value
+            };
+
+            fields.insert(field_name.clone(), value);
+        }
+
+        if should_skip_item(&fields) {
+            continue;
+        }
+
+        extracted.push(fields);
+    }
+
+    if extracted.is_empty() {
+        return Err(anyhow!("CSS selector '{}' returned no results", path));
+    }
+
+    Ok(extracted)
+}
+
+fn parse_css_path(path: &str) -> Result<(String, CssTarget)> {
+    if let Some(idx) = path.rfind("::attr(") {
+        let (selector, rest) = path.split_at(idx);
+        let attr_part = rest.trim_start_matches("::attr(");
+        let attr_name = attr_part
+            .strip_suffix(')')
+            .ok_or_else(|| anyhow!("CSS attr selector '{}' missing ')'", path))?;
+        return Ok((
+            selector.trim().to_string(),
+            CssTarget::Attr(attr_name.to_string()),
+        ));
+    }
+
+    if path.ends_with("::text()") {
+        let selector = path.trim_end_matches("::text()").trim();
+        return Ok((selector.to_string(), CssTarget::Text));
+    }
+
+    if path.ends_with("::text") {
+        let selector = path.trim_end_matches("::text").trim();
+        return Ok((selector.to_string(), CssTarget::Text));
+    }
+
+    Ok((path.trim().to_string(), CssTarget::Text))
+}
+
+fn extract_css_value_from_node(path: &str, node: ElementRef) -> Option<String> {
+    let (selector, target) = parse_css_path(path).ok()?;
+    let selector = selector.trim();
+
+    if selector.is_empty() {
+        return extract_css_value_from_element(node, &target);
+    }
+
+    let selector = Selector::parse(selector).ok()?;
+
+    if let Some(element) = node.select(&selector).next() {
+        return extract_css_value_from_element(element, &target);
+    }
+
+    if node.value().name() == "template" {
+        let fragment = Html::parse_fragment(&node.inner_html());
+        if let Some(element) = fragment.select(&selector).next() {
+            return extract_css_value_from_element(element, &target);
+        }
+    }
+
+    None
+}
+
+fn extract_css_value_from_element(element: ElementRef, target: &CssTarget) -> Option<String> {
+    match target {
+        CssTarget::Text => {
+            let text = element.text().collect::<Vec<_>>().join("");
+            let text = text.trim();
+            if text.is_empty() {
+                None
+            } else {
+                Some(text.to_string())
+            }
+        }
+        CssTarget::Attr(name) => element.value().attr(name).map(|s| s.to_string()),
     }
 }
 

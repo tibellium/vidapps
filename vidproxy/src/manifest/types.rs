@@ -239,6 +239,10 @@ pub enum StepKind {
     SniffMany,
     /// Fetch a URL via HTTP (no browser needed)
     Fetch,
+    /// Fetch a URL via the browser context (inherits page cookies/headers)
+    FetchInBrowser,
+    /// Extract from the current page's DOM (evaluates document HTML)
+    Document,
 }
 
 /**
@@ -326,9 +330,23 @@ pub enum ExtractorKind {
     #[serde(rename = "jsonpath_regex")]
     JsonPathRegex,
     /**
+        CSS selector on HTML response body
+    */
+    Css,
+    /**
+        CSS selector returning array of objects with sub-extractors
+    */
+    #[serde(rename = "css_array")]
+    CssArray,
+    /**
         XPath query on XML response body
     */
     XPath,
+    /**
+        XPath query returning array of objects with sub-extractors
+    */
+    #[serde(rename = "xpath_array")]
+    XPathArray,
     /**
         Regex with capture group on response body
     */

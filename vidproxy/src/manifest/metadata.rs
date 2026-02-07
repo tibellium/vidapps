@@ -36,7 +36,7 @@ pub async fn execute_metadata(
     // We expect an array result from metadata extraction
     // Each item in the array represents a channel with nested programmes
     let (_array_key, items) = array_result
-        .ok_or_else(|| anyhow!("Metadata phase must have a jsonpath_array or regex_array extractor"))?;
+        .ok_or_else(|| anyhow!("Metadata phase must have a jsonpath_array, regex_array, xpath_array, or css_array extractor"))?;
 
     let mut programmes_by_channel: HashMap<String, Vec<Programme>> = HashMap::new();
 

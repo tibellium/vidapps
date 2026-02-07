@@ -35,6 +35,14 @@ fn interpolate_extractor(
         interpolated.default = Some(context.interpolate(default)?);
     }
 
+    if let Some(each) = &extractor.each {
+        let mut next_each = HashMap::new();
+        for (key, value) in each {
+            next_each.insert(key.clone(), context.interpolate(value)?);
+        }
+        interpolated.each = Some(next_each);
+    }
+
     Ok(interpolated)
 }
 
@@ -115,7 +123,10 @@ pub async fn execute_sniff(
 
     // Check if any extractor is array-capable
     let has_array_extractor = step.extract.values().any(|e| {
-        e.kind == ExtractorKind::JsonPathArray || e.kind == ExtractorKind::RegexArray
+        e.kind == ExtractorKind::JsonPathArray
+            || e.kind == ExtractorKind::RegexArray
+            || e.kind == ExtractorKind::XPathArray
+            || e.kind == ExtractorKind::CssArray
     });
 
     // Wait for matching request
@@ -169,6 +180,8 @@ pub async fn execute_sniff(
             for (output_name, extractor) in &step.extract {
                 if extractor.kind == ExtractorKind::JsonPathArray
                     || extractor.kind == ExtractorKind::RegexArray
+                    || extractor.kind == ExtractorKind::XPathArray
+                    || extractor.kind == ExtractorKind::CssArray
                 {
                     let extractor = interpolate_extractor(extractor, context)?;
                     match extract_array(&extractor, &body) {
@@ -259,7 +272,10 @@ pub async fn execute_sniff_many(
 
     // Check if any extractor is array-capable
     let has_array_extractor = step.extract.values().any(|e| {
-        e.kind == ExtractorKind::JsonPathArray || e.kind == ExtractorKind::RegexArray
+        e.kind == ExtractorKind::JsonPathArray
+            || e.kind == ExtractorKind::RegexArray
+            || e.kind == ExtractorKind::XPathArray
+            || e.kind == ExtractorKind::CssArray
     });
 
     // Collect all matching requests
@@ -335,6 +351,8 @@ pub async fn execute_sniff_many(
             for (output_name, extractor) in &step.extract {
                 if extractor.kind == ExtractorKind::JsonPathArray
                     || extractor.kind == ExtractorKind::RegexArray
+                    || extractor.kind == ExtractorKind::XPathArray
+                    || extractor.kind == ExtractorKind::CssArray
                 {
                     if array_extractor_name.is_none() {
                         array_extractor_name = Some(output_name.clone());
@@ -372,7 +390,7 @@ pub async fn execute_sniff_many(
     }
 
     Err(anyhow!(
-        "SniffMany step '{}' requires a jsonpath_array or regex_array extractor",
+        "SniffMany step '{}' requires a jsonpath_array, regex_array, xpath_array, or css_array extractor",
         step.name
     ))
 }
@@ -417,7 +435,10 @@ async fn execute_fetch(
 
     // Check if any extractor is array-capable
     let has_array_extractor = step.extract.values().any(|e| {
-        e.kind == ExtractorKind::JsonPathArray || e.kind == ExtractorKind::RegexArray
+        e.kind == ExtractorKind::JsonPathArray
+            || e.kind == ExtractorKind::RegexArray
+            || e.kind == ExtractorKind::XPathArray
+            || e.kind == ExtractorKind::CssArray
     });
 
     // Handle array extractor specially
@@ -425,6 +446,154 @@ async fn execute_fetch(
         for (output_name, extractor) in &step.extract {
             if extractor.kind == ExtractorKind::JsonPathArray
                 || extractor.kind == ExtractorKind::RegexArray
+                || extractor.kind == ExtractorKind::XPathArray
+                || extractor.kind == ExtractorKind::CssArray
+            {
+                let extractor = interpolate_extractor(extractor, context)?;
+                let items = extract_array(&extractor, &body)?;
+                println!(
+                    "[executor] Extracted {} items from {}.{}",
+                    items.len(),
+                    step.name,
+                    output_name
+                );
+                return Ok(SniffResult::Array {
+                    name: output_name.clone(),
+                    items,
+                });
+            }
+        }
+    }
+
+    // Run normal extractors
+    let mut extracted = HashMap::new();
+    for (output_name, extractor) in &step.extract {
+        let extractor = interpolate_extractor(extractor, context)?;
+        let value = extract(&extractor, &body, &url)?;
+        println!("[executor] Extracted {}.{}", step.name, output_name);
+        extracted.insert(output_name.clone(), value);
+    }
+
+    Ok(SniffResult::Single(extracted))
+}
+
+/**
+    Execute a Document step - extract data from the current page HTML.
+*/
+async fn execute_document(
+    step: &Step,
+    tab: &ChromeBrowserTab,
+    context: &InterpolationContext,
+) -> Result<SniffResult> {
+    println!("[executor] Reading document HTML");
+
+    let value = tab
+        .eval_json("document.documentElement.outerHTML", false)
+        .await?;
+
+    let body = match value {
+        serde_json::Value::String(s) => s,
+        other => other.to_string(),
+    };
+
+    // Check if any extractor is array-capable
+    let has_array_extractor = step.extract.values().any(|e| {
+        e.kind == ExtractorKind::JsonPathArray
+            || e.kind == ExtractorKind::RegexArray
+            || e.kind == ExtractorKind::XPathArray
+            || e.kind == ExtractorKind::CssArray
+    });
+
+    // Handle array extractor specially
+    if has_array_extractor {
+        for (output_name, extractor) in &step.extract {
+            if extractor.kind == ExtractorKind::JsonPathArray
+                || extractor.kind == ExtractorKind::RegexArray
+                || extractor.kind == ExtractorKind::XPathArray
+                || extractor.kind == ExtractorKind::CssArray
+            {
+                let extractor = interpolate_extractor(extractor, context)?;
+                let items = extract_array(&extractor, &body)?;
+                println!(
+                    "[executor] Extracted {} items from {}.{}",
+                    items.len(),
+                    step.name,
+                    output_name
+                );
+                return Ok(SniffResult::Array {
+                    name: output_name.clone(),
+                    items,
+                });
+            }
+        }
+    }
+
+    // Run normal extractors
+    let mut extracted = HashMap::new();
+    for (output_name, extractor) in &step.extract {
+        let extractor = interpolate_extractor(extractor, context)?;
+        let value = extract(&extractor, &body, "")?;
+        println!("[executor] Extracted {}.{}", step.name, output_name);
+        extracted.insert(output_name.clone(), value);
+    }
+
+    Ok(SniffResult::Single(extracted))
+}
+
+/**
+    Execute a BrowserFetch step - fetches via the page context to inherit cookies.
+*/
+async fn execute_fetch_in_browser(
+    step: &Step,
+    tab: &ChromeBrowserTab,
+    context: &InterpolationContext,
+) -> Result<SniffResult> {
+    let url_template = step
+        .url
+        .as_ref()
+        .ok_or_else(|| anyhow!("FetchInBrowser step '{}' requires 'url'", step.name))?;
+
+    let url = context.interpolate(url_template)?;
+    println!("[executor] FetchInBrowser: {}", url);
+
+    let script = format!(
+        r#"(async () => {{
+            const tryFetch = async (options) => {{
+                const res = await fetch({url:?}, options);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return await res.text();
+            }};
+            try {{
+                return await tryFetch({{ credentials: 'include', mode: 'cors' }});
+            }} catch (err) {{
+                return await tryFetch({{ credentials: 'omit', mode: 'cors' }});
+            }}
+        }})()"#
+    );
+
+    let value = tab.eval_json(script, true).await?;
+    let body = match value {
+        serde_json::Value::String(s) => s,
+        other => other.to_string(),
+    };
+
+    println!("[executor] Browser fetched {} bytes", body.len());
+
+    // Check if any extractor is array-capable
+    let has_array_extractor = step.extract.values().any(|e| {
+        e.kind == ExtractorKind::JsonPathArray
+            || e.kind == ExtractorKind::RegexArray
+            || e.kind == ExtractorKind::XPathArray
+            || e.kind == ExtractorKind::CssArray
+    });
+
+    // Handle array extractor specially
+    if has_array_extractor {
+        for (output_name, extractor) in &step.extract {
+            if extractor.kind == ExtractorKind::JsonPathArray
+                || extractor.kind == ExtractorKind::RegexArray
+                || extractor.kind == ExtractorKind::XPathArray
+                || extractor.kind == ExtractorKind::CssArray
             {
                 let extractor = interpolate_extractor(extractor, context)?;
                 let items = extract_array(&extractor, &body)?;
@@ -516,6 +685,28 @@ pub async fn execute_steps(
                 }
             }
             StepKind::Fetch => match execute_fetch(step, &context, &http_client).await? {
+                SniffResult::Single(values) => {
+                    for (output_name, value) in values {
+                        context.set(&step.name, &output_name, value);
+                    }
+                }
+                SniffResult::Array { name, items } => {
+                    array_result = Some((format!("{}.{}", step.name, name), items));
+                }
+            },
+            StepKind::FetchInBrowser => {
+                match execute_fetch_in_browser(step, tab, &context).await? {
+                    SniffResult::Single(values) => {
+                        for (output_name, value) in values {
+                            context.set(&step.name, &output_name, value);
+                        }
+                    }
+                    SniffResult::Array { name, items } => {
+                        array_result = Some((format!("{}.{}", step.name, name), items));
+                    }
+                }
+            }
+            StepKind::Document => match execute_document(step, tab, &context).await? {
                 SniffResult::Single(values) => {
                     for (output_name, value) in values {
                         context.set(&step.name, &output_name, value);

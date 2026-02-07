@@ -20,19 +20,18 @@ discovery:
       kind: Navigate
       url: "https://www.caracoltv.com/senal-vivo"
       wait_for:
-        selector: "ps-list-live-stream"
+        selector: "template[id^='signal-item-']"
 
     - name: "find_channels"
-      kind: Fetch
-      url: "https://www.caracoltv.com/senal-vivo"
+      kind: Document
       extract:
         channels:
-          kind: regex_array
-          path: '(?s)<template id="signal-item-\d+">.*?<div class="LiveStreamModule-header-logo[^>]*>.*?<img[^>]+src="(?P<image>[^"]*?url=[^"]*?%2F(?P<image_id>[a-z0-9_-]+)\.png[^"]*)"[^>]*>.*?<h1 class="LiveStreamModule-title[^"]*">(?P<name>[^<]+)</h1>.*?(?:data-publicTokenEndpoint="https://ms-live\.noticiascaracol\.com/vide-public-token/(?P<token_id>[^"]+)"|data-signalLive="signalLive").*?</template>'
+          kind: css_array
+          path: "template[id^='signal-item-']"
           each:
-            id: "token_id|image_id"
-            name: "name"
-            image: "image"
+            id: "ps-mediastream::attr(data-video-id)"
+            name: "h1.LiveStreamModule-title::text"
+            image: "div.LiveStreamModule-header-logo img.Image::attr(src)"
           unescape: true
 
 # Processing phase: rename and categorize channels
@@ -95,56 +94,67 @@ metadata:
     - name: "go_live"
       kind: Navigate
       url: "https://www.caracoltv.com/senal-vivo"
+      wait_for:
+        selector: "template[id^='signal-item-']"
+
+    - name: "get_ctv"
+      kind: Document
+      extract:
+        video_id:
+          kind: css
+          path: "ps-mediastream[data-publicTokenEndpoint='https://ms-live.noticiascaracol.com/vide-public-token/ctv']::attr(data-video-id)"
+
+    - name: "go_schedule"
+      kind: Navigate
+      url: "https://www.caracoltv.com/programacion"
+      wait_for:
+        selector: "div.ScheduleDay-Content-item"
 
     - name: "get_schedule"
-      kind: Fetch
-      url: "https://www.caracoltv.com/senal-vivo"
+      kind: Document
       extract:
         programmes:
-          kind: regex_array
-          path: '(?s)<ps-scheduleditem[^>]*data-title="(?P<title>[^"]+)"[^>]*data-starttime="(?P<start_time>\d+)"[^>]*data-endtime="(?P<end_time>\d+)"[^>]*>(?:.*?<img[^>]+src="(?P<image>[^"]+)")?.*?</ps-scheduleditem>'
+          kind: css_array
+          path: "div.ScheduleDay-Content-item"
           each:
-            channel_id: "const:ctv"
-            title: "title"
-            start_time: "start_time"
-            end_time: "end_time"
-            image: "image"
+            channel_id: "const:${{get_ctv.video_id}}"
+            title: "h2.ScheduleDay-info-title a::text"
+            start_time: "::attr(data-starttime)"
+            end_time: "::attr(data-endtime)"
+            image: "img.Image::attr(src)"
           unescape: true
 
 # Content phase: extract stream info for each channel
 
 content:
   outputs:
-    manifest_url: "https://mdstrm.com/live-stream-playlist/${{get_channel_video.video_id}}.m3u8?access_token=${{get_token.access_token}}"
+    manifest_url: "https://mdstrm.com/live-stream-playlist/${{channel.id}}.m3u8?access_token=${{get_token.access_token}}"
 
   steps:
     - name: "go_live"
       kind: Navigate
       url: "https://www.caracoltv.com/senal-vivo"
+      wait_for:
+        selector: "template[id^='signal-item-']"
 
-    - name: "get_channel_video"
-      kind: Fetch
-      url: "https://www.caracoltv.com/senal-vivo"
+    - name: "get_channel_token"
+      kind: Document
       extract:
-        video_id:
-          kind: regex
-          path: '(?s)<template id="signal-item-\d+">.*?(?:data-video-id="([^"]+)"[^>]*data-publicTokenEndpoint="https://ms-live\.noticiascaracol\.com/vide-public-token/${{channel.id}}"|url=[^"]*?%2F${{channel.id}}\.png[^"]*.*?data-video-id="([^"]+)").*?</template>'
-        token_path:
-          kind: regex
-          path: '(?s)<template id="signal-item-\d+">.*?(?:data-publicTokenEndpoint="https://ms-live\.noticiascaracol\.com/vide-public-token/(${{channel.id}})"|url=[^"]*?%2F${{channel.id}}\.png[^"]*.*?data-signalLive="signalLive").*?</template>'
-          default: "ctv"
+        token_url:
+          kind: css
+          path: "ps-mediastream[data-video-id='${{channel.id}}']::attr(data-publicTokenEndpoint)"
+          default: "https://ms-live.noticiascaracol.com/vide-public-token/ctv"
 
     - name: "get_token_video"
-      kind: Fetch
-      url: "https://www.caracoltv.com/senal-vivo"
+      kind: Document
       extract:
         token_video_id:
-          kind: regex
-          path: 'data-video-id="([^"]+)"[^>]*data-publicTokenEndpoint="https://ms-live\.noticiascaracol\.com/vide-public-token/${{get_channel_video.token_path}}"'
+          kind: css
+          path: "ps-mediastream[data-publicTokenEndpoint='${{get_channel_token.token_url}}']::attr(data-video-id)"
 
     - name: "get_token"
-      kind: Fetch
-      url: "https://ms-live.noticiascaracol.com/vide-public-token/${{get_channel_video.token_path}}?id=${{get_token_video.token_video_id}}"
+      kind: FetchInBrowser
+      url: "${{get_channel_token.token_url}}?id=${{get_token_video.token_video_id}}"
       extract:
         access_token:
           kind: jsonpath
