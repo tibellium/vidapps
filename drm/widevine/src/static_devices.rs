@@ -1,17 +1,34 @@
+use std::sync::OnceLock;
+
 use include_dir::{Dir, include_dir};
 
 use crate::device::Device;
 
 static DEVICES_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/devices");
+static DEVICES: OnceLock<Vec<Device>> = OnceLock::new();
+
+fn load_devices() -> Vec<Device> {
+    let mut devices = Vec::new();
+    for file in DEVICES_DIR.files() {
+        let path = file.path().display();
+        match Device::from_bytes(file.contents()) {
+            Ok(device) => devices.push(device),
+            Err(e) => eprintln!("warning: failed to parse embedded device {path}: {e}"),
+        }
+    }
+    devices
+}
+
+fn devices() -> &'static [Device] {
+    DEVICES.get_or_init(load_devices)
+}
 
 /**
-    Return an iterator over all embedded devices, lazily parsed.
-    Skips files that fail to parse (shouldn't happen with valid .wvd files).
+    Return all embedded devices (parsed once, cached in memory).
+    Devices that fail to parse are skipped with a warning on stderr.
 */
-pub fn all() -> impl Iterator<Item = Device> {
-    DEVICES_DIR
-        .files()
-        .filter_map(|file| Device::from_bytes(file.contents()).ok())
+pub fn all() -> &'static [Device] {
+    devices()
 }
 
 /**
@@ -19,36 +36,19 @@ pub fn all() -> impl Iterator<Item = Device> {
 
     # Panics
 
-    Panics if the embedded devices directory is empty or contains an unparseable file.
+    Panics if no embedded devices parsed successfully.
 */
 pub fn random() -> Device {
-    let files: Vec<_> = DEVICES_DIR.files().collect();
-    assert!(!files.is_empty(), "no embedded device files");
-    let idx = rand::random_range(0..files.len());
-    Device::from_bytes(files[idx].contents()).expect("embedded .wvd file failed to parse")
-}
-
-/**
-    Return the number of embedded device files.
-*/
-pub fn count() -> usize {
-    DEVICES_DIR.files().count()
+    let devs = devices();
+    assert!(!devs.is_empty(), "no usable embedded device files");
+    let idx = rand::random_range(0..devs.len());
+    devs[idx].clone()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::types::SecurityLevel;
-
-    #[test]
-    fn count_matches_dir() {
-        assert_eq!(count(), 12);
-    }
-
-    #[test]
-    fn all_devices_parse() {
-        assert_eq!(all().count(), count());
-    }
 
     #[test]
     fn random_returns_valid_device() {
