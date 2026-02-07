@@ -5367,6 +5367,8 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "rustls-platform-verifier",
+ "serde",
+ "serde_json",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
@@ -7317,7 +7319,7 @@ dependencies = [
  "include_dir",
  "jsonpath-rust",
  "regex",
- "reqwest 0.12.28",
+ "reqwest 0.13.1",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -7606,12 +7608,10 @@ dependencies = [
  "anyhow",
  "clap",
  "hex",
- "prost",
  "reqwest 0.13.1",
  "rsa",
  "tokio",
  "wdv3",
- "wdv3-proto",
 ]
 
 [[package]]

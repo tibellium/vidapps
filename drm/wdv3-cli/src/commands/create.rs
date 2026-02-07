@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
-use prost::Message;
 use rsa::{pkcs1::DecodeRsaPrivateKey, pkcs8::DecodePrivateKey, traits::PublicKeyParts};
+use wdv3::proto::Message;
 
 /**
     Create a .wvd device file from raw credential files.
@@ -41,7 +41,7 @@ impl CreateCommand {
 
         // Parse the ClientIdentification protobuf
         let cid_data = std::fs::read(&self.client_id).context("failed to read client_id file")?;
-        let client_id = wdv3_proto::ClientIdentification::decode(cid_data.as_slice())
+        let client_id = wdv3::proto::ClientIdentification::decode(cid_data.as_slice())
             .context("failed to decode ClientIdentification protobuf")?;
         eprintln!("Loaded ClientIdentification ({} bytes)", cid_data.len());
 

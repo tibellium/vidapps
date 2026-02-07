@@ -6,14 +6,12 @@ publish = { workspace = true }
 
 [dependencies]
 wdv3 = { path = "../wdv3" }
-wdv3-proto = { path = "../wdv3-proto" }
 
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 reqwest = "0.13"
 anyhow = "1"
 hex = "0.4"
-prost = "0.14"
 rsa = "0.9"
 
 [[bin]]

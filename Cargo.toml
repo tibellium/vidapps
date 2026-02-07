@@ -1,12 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
+    "drm/wdv3",
+    "drm/wdv3-cli",
+    "drm/wdv3-proto",
     "vidwall",
     "vidplayer",
     "vidproxy",
-    "wdv3",
-    "wdv3-cli",
-    "wdv3-proto",
 ]
 
 [workspace.package]

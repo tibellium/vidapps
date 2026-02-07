@@ -30,8 +30,8 @@ tempfile = "3"
 
 # DRM sniffer (Chrome automation + key extraction)
 chrome-browser = { git = "https://github.com/tibellium/crates", rev = "0c46e1c7dfc8fccbe7d43dcbd5c5db779dc6a5a1" }
-wdv3 = { path = "../wdv3", features = ["static-devices"] }
-reqwest = { version = "0.12", features = ["json", "socks"] }
+wdv3 = { path = "../drm/wdv3", features = ["static-devices"] }
+reqwest = { version = "0.13", features = ["json", "socks"] }
 base64 = "0.22"
 anyhow = "1.0"
 serde = { version = "1", features = ["derive"] }

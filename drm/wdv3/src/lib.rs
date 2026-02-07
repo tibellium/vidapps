@@ -9,6 +9,11 @@ mod session;
 mod types;
 mod utils;
 
+pub mod proto {
+    pub use prost::Message;
+    pub use wdv3_proto::*;
+}
+
 #[cfg(feature = "static-devices")]
 pub mod static_devices;
 
