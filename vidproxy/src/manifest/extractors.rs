@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use anyhow::{Result, anyhow};
+use axum::http::HeaderMap;
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
 use sxd_xpath::nodeset::Node;
@@ -17,10 +18,16 @@ pub type ExtractedArray = Vec<HashMap<String, Option<String>>>;
     Run an extractor on the given content.
     Returns a single string value.
 */
-pub fn extract(extractor: &Extractor, content: &str, url: &str) -> Result<String> {
+pub fn extract(
+    extractor: &Extractor,
+    content: &str,
+    url: &str,
+    headers: Option<&HeaderMap>,
+) -> Result<String> {
     let value = match extractor.kind {
         ExtractorKind::Url => Ok(url.to_string()),
         ExtractorKind::UrlRegex => extract_regex(extractor, url),
+        ExtractorKind::Header => extract_header(extractor, headers),
         ExtractorKind::JsonPath => extract_jsonpath(extractor, content),
         ExtractorKind::JsonPathArray => {
             Err(anyhow!("Use extract_array() for jsonpath_array extractors"))
@@ -42,6 +49,35 @@ pub fn extract(extractor: &Extractor, content: &str, url: &str) -> Result<String
     } else {
         Ok(value)
     }
+}
+
+fn extract_header(extractor: &Extractor, headers: Option<&HeaderMap>) -> Result<String> {
+    let header_name = extractor
+        .path
+        .as_ref()
+        .ok_or_else(|| anyhow!("header extractor requires 'path'"))?;
+
+    let Some(headers) = headers else {
+        return Err(anyhow!(
+            "header extractor can only be used with Sniff steps"
+        ));
+    };
+
+    if let Some(value) = headers.get(header_name)
+        && let Ok(s) = value.to_str()
+        && !s.is_empty()
+    {
+        return Ok(s.to_string());
+    }
+
+    if let Some(default) = &extractor.default {
+        return Ok(default.clone());
+    }
+
+    Err(anyhow!(
+        "Request header '{}' not found or invalid UTF-8",
+        header_name
+    ))
 }
 
 /**
@@ -162,7 +198,7 @@ fn extract_simple(
         let mut fields: HashMap<String, Option<String>> = HashMap::new();
 
         for (field_name, field_path) in each {
-            let value = extract_jsonpath_value(&obj, field_path);
+            let value = extract_jsonpath_field(&obj, None, field_path);
             fields.insert(field_name.clone(), value);
         }
 
@@ -228,14 +264,7 @@ fn extract_with_parent_context(
             let mut fields: HashMap<String, Option<String>> = HashMap::new();
 
             for (field_name, field_path) in each {
-                let value = if field_path.starts_with("$parent") {
-                    // Extract from parent object
-                    let parent_field_path = field_path.replacen("$parent", "$", 1);
-                    extract_jsonpath_value(&parent_obj, &parent_field_path)
-                } else {
-                    // Extract from child object
-                    extract_jsonpath_value(&child_obj, field_path)
-                };
+                let value = extract_jsonpath_field(&child_obj, Some(&parent_obj), field_path);
                 fields.insert(field_name.clone(), value);
             }
 
@@ -325,6 +354,43 @@ fn extract_jsonpath_value(obj: &serde_json::Value, path: &str) -> Option<String>
         serde_json::Value::Null => None,
         other => Some(other.to_string()),
     }
+}
+
+/**
+    Extract a value from JSONPath array field definitions.
+    Supports fallback candidates separated by `|`, `const:` values,
+    and `$parent` references when parent context is available.
+*/
+fn extract_jsonpath_field(
+    child_obj: &serde_json::Value,
+    parent_obj: Option<&serde_json::Value>,
+    field_spec: &str,
+) -> Option<String> {
+    for candidate in field_spec.split('|').map(|s| s.trim()) {
+        if candidate.is_empty() {
+            continue;
+        }
+
+        if let Some(const_value) = candidate.strip_prefix("const:") {
+            return Some(const_value.to_string());
+        }
+
+        if candidate.starts_with("$parent") {
+            if let Some(parent_obj) = parent_obj {
+                let parent_field_path = candidate.replacen("$parent", "$", 1);
+                if let Some(value) = extract_jsonpath_value(parent_obj, &parent_field_path) {
+                    return Some(value);
+                }
+            }
+            continue;
+        }
+
+        if let Some(value) = extract_jsonpath_value(child_obj, candidate) {
+            return Some(value);
+        }
+    }
+
+    None
 }
 
 /**
@@ -1050,6 +1116,7 @@ fn extract_pssh(content: &str, url: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::http::{HeaderMap, HeaderValue};
 
     #[test]
     fn test_extract_url() {
@@ -1061,7 +1128,13 @@ mod tests {
             each: None,
             unescape: false,
         };
-        let result = extract(&extractor, "body content", "https://example.com/test.mpd").unwrap();
+        let result = extract(
+            &extractor,
+            "body content",
+            "https://example.com/test.mpd",
+            None,
+        )
+        .unwrap();
         assert_eq!(result, "https://example.com/test.mpd");
     }
 
@@ -1076,7 +1149,7 @@ mod tests {
             unescape: false,
         };
         let content = "some header\nabc123:def456\nmore stuff";
-        let result = extract(&extractor, content, "").unwrap();
+        let result = extract(&extractor, content, "", None).unwrap();
         assert_eq!(result, "abc123:def456");
     }
 
@@ -1090,7 +1163,7 @@ mod tests {
             each: None,
             unescape: false,
         };
-        let result = extract(&extractor, "content?id=12345&other=value", "").unwrap();
+        let result = extract(&extractor, "content?id=12345&other=value", "", None).unwrap();
         assert_eq!(result, "12345");
     }
 
@@ -1139,16 +1212,40 @@ mod tests {
             unescape: true,
         };
         let content = r"url=https://example.com?a=1\u0026b=2";
-        let result = extract(&extractor, content, "").unwrap();
+        let result = extract(&extractor, content, "", None).unwrap();
         assert_eq!(result, "https://example.com?a=1&b=2");
+    }
+
+    #[test]
+    fn test_extract_header() {
+        let extractor = Extractor {
+            kind: ExtractorKind::Header,
+            path: Some("referer".to_string()),
+            default: None,
+            regex: None,
+            each: None,
+            unescape: false,
+        };
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "referer",
+            HeaderValue::from_static("https://mdstrm.com/live-stream/abc"),
+        );
+
+        let result = extract(&extractor, "", "", Some(&headers)).unwrap();
+        assert_eq!(result, "https://mdstrm.com/live-stream/abc");
     }
 
     #[test]
     fn test_extract_jsonpath_array() {
         let mut each = HashMap::new();
         each.insert("id".to_string(), "$.id".to_string());
-        each.insert("name".to_string(), "$.title".to_string());
-        each.insert("image".to_string(), "$.thumbnail".to_string());
+        each.insert("name".to_string(), "$.title|$.name".to_string());
+        each.insert(
+            "image".to_string(),
+            "$.thumbnail|const:fallback.jpg".to_string(),
+        );
 
         let extractor = Extractor {
             kind: ExtractorKind::JsonPathArray,
@@ -1189,7 +1286,10 @@ mod tests {
             result[1].get("name").unwrap(),
             &Some("Channel Two".to_string())
         );
-        assert_eq!(result[1].get("image").unwrap(), &None);
+        assert_eq!(
+            result[1].get("image").unwrap(),
+            &Some("fallback.jpg".to_string())
+        );
     }
 
     #[test]
@@ -1255,6 +1355,42 @@ mod tests {
             &Some("channel2".to_string())
         );
         assert_eq!(result[2].get("title").unwrap(), &Some("Show C".to_string()));
+    }
+
+    #[test]
+    fn test_extract_jsonpath_array_with_const_channel_id() {
+        let mut each = HashMap::new();
+        each.insert("channel_id".to_string(), "const:principal".to_string());
+        each.insert("title".to_string(), "$.name".to_string());
+        each.insert("start_time".to_string(), "$.start".to_string());
+        each.insert("end_time".to_string(), "$.end".to_string());
+
+        let extractor = Extractor {
+            kind: ExtractorKind::JsonPathArray,
+            path: Some("$.schedule[*]".to_string()),
+            default: None,
+            regex: None,
+            each: Some(each),
+            unescape: false,
+        };
+
+        let content = r#"{
+            "schedule": [
+                {"name": "Show A", "start": "1770000000000", "end": "1770003600000"},
+                {"name": "Show B", "start": "1770003600000", "end": "1770007200000"}
+            ]
+        }"#;
+
+        let result = extract_array(&extractor, content).unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(
+            result[0].get("channel_id").unwrap(),
+            &Some("principal".to_string())
+        );
+        assert_eq!(
+            result[1].get("channel_id").unwrap(),
+            &Some("principal".to_string())
+        );
     }
 
     #[test]

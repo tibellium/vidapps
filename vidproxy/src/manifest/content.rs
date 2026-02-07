@@ -89,7 +89,9 @@ fn resolve_headers(
     let mut resolved = Vec::with_capacity(headers.len());
     for (key, value) in headers {
         let value = context.interpolate(value)?;
-        resolved.push((key.clone(), value));
+        if !value.trim().is_empty() {
+            resolved.push((key.clone(), value));
+        }
     }
 
     Ok(resolved)

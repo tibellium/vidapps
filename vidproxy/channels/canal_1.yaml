@@ -1,0 +1,147 @@
+source:
+  id: "canal_1"
+  name: "Canal 1"
+  country: "CO"
+  language: "es"
+  headless: false
+  proxy: "socks5://127.0.0.1:1080"
+
+discovery:
+  outputs:
+    id: "${{get_live_json.channel_id}}"
+    name: "Canal 1 - Señal en Vivo"
+    image: "${{get_brand.image}}"
+    expires_in: 86400
+
+  steps:
+    - name: "go_live"
+      kind: Navigate
+      url: "https://www.canal1.com.co/senal-en-vivo/"
+      wait_for:
+        selector: "script#__NEXT_DATA__"
+
+    - name: "get_brand"
+      kind: Document
+      extract:
+        image:
+          kind: css
+          path: "meta[property='og:image']::attr(content)"
+
+    - name: "get_build_id"
+      kind: Document
+      extract:
+        build_id:
+          kind: regex
+          path: '(?s)<script[^>]*id="__NEXT_DATA__"[^>]*>.*?"buildId":"([^"]+)".*?</script>'
+
+    - name: "get_live_json"
+      kind: Fetch
+      url: "https://www.canal1.com.co/_next/data/${{get_build_id.build_id}}/senal-en-vivo.json"
+      extract:
+        channel_id:
+          kind: jsonpath
+          path: "$.pageProps.page.extra_info.principal_signal"
+
+process:
+  transforms:
+    - kind: AddCategory
+      name: "Canal 1 - Señal en Vivo"
+      category: "Canal 1"
+    - kind: AddDescription
+      name: "Canal 1 - Señal en Vivo"
+      description: "Transmisión en vivo 24/7"
+
+metadata:
+  outputs:
+    programmes: "${{get_schedule.programmes}}"
+    expires_in: 3600
+
+  steps:
+    - name: "go_live"
+      kind: Navigate
+      url: "https://www.canal1.com.co/senal-en-vivo/"
+      wait_for:
+        selector: "script#__NEXT_DATA__"
+
+    - name: "get_build_id"
+      kind: Document
+      extract:
+        build_id:
+          kind: regex
+          path: '(?s)<script[^>]*id="__NEXT_DATA__"[^>]*>.*?"buildId":"([^"]+)".*?</script>'
+
+    - name: "get_live_json"
+      kind: Fetch
+      url: "https://www.canal1.com.co/_next/data/${{get_build_id.build_id}}/senal-en-vivo.json"
+      extract:
+        principal_signal:
+          kind: jsonpath
+          path: "$.pageProps.page.extra_info.principal_signal"
+
+    - name: "get_schedule"
+      kind: Fetch
+      url: "https://www.canal1.com.co/_next/data/${{get_build_id.build_id}}/senal-en-vivo.json"
+      extract:
+        programmes:
+          kind: jsonpath_array
+          path: "$.pageProps.schedule[*]"
+          each:
+            channel_id: "const:${{get_live_json.principal_signal}}"
+            title: "$.name"
+            description: "$.descriptionShow|$.description"
+            start_time: "$.dateTime"
+            end_time: "$.dateFinishTime"
+            image: "$.featured_image.url"
+
+content:
+  outputs:
+    manifest_url: "${{get_manifest.manifest_url}}"
+    headers:
+      Referer: "${{get_manifest.referer}}"
+      Origin: "${{get_manifest.origin}}"
+      Accept: "${{get_manifest.accept}}"
+      Accept-Language: "${{get_manifest.accept_language}}"
+      User-Agent: "${{get_manifest.user_agent}}"
+      Cookie: "${{get_manifest.cookie}}"
+
+  steps:
+    - name: "go_live"
+      kind: Navigate
+      url: "https://www.canal1.com.co/senal-en-vivo/"
+      wait_for:
+        selector: "script#__NEXT_DATA__"
+
+    - name: "start_player"
+      kind: Automation
+      steps:
+        - kind: Click
+          selector: ".screen-status-bar" # This is inside an iframe
+          wait_for:
+            delay: 0.5
+
+    - name: "get_manifest"
+      kind: Sniff
+      request:
+        url: "cdn\\.mdstrm\\.com/.*/media_1000\\.m3u8(\\?.*)?"
+        timeout: 120.0
+      extract:
+        manifest_url:
+          kind: url
+        referer:
+          kind: request_header
+          path: "referer"
+        origin:
+          kind: request_header
+          path: "origin"
+        accept:
+          kind: request_header
+          path: "accept"
+        accept_language:
+          kind: request_header
+          path: "accept-language"
+        user_agent:
+          kind: request_header
+          path: "user-agent"
+        cookie:
+          kind: request_header
+          path: "cookie"

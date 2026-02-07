@@ -7,7 +7,7 @@ use reqwest::{Client, Proxy};
 
 use super::extractors::{ExtractedArray, extract, extract_array};
 use super::interpolate::InterpolationContext;
-use super::types::{Extractor, ExtractorKind, Step, StepKind};
+use super::types::{Extractor, ExtractorKind, Step, StepKind, WaitCondition};
 
 /**
     User agent for HTTP fetch requests
@@ -63,22 +63,35 @@ pub async fn execute_navigate(
     println!("[executor] Navigating to: {}", url);
     tab.navigate(&url).await?;
 
-    // Wait for condition if specified
     if let Some(wait_for) = &step.wait_for {
-        if let Some(selector) = &wait_for.selector {
-            println!("[executor] Waiting for selector: {}", selector);
-            tab.wait_for_selector(selector).await?;
-        }
-        if let Some(expr) = &wait_for.function {
-            println!("[executor] Waiting for function: {}", expr);
-            tab.wait_for_function(expr).await?;
-        }
-        if let Some(delay) = wait_for.delay {
-            println!("[executor] Waiting {} seconds", delay);
-            tokio::time::sleep(std::time::Duration::from_secs_f64(delay)).await;
-        }
+        apply_wait_condition(wait_for, tab, context).await?;
     }
 
+    Ok(())
+}
+
+/**
+    Apply a wait condition with interpolation support.
+*/
+async fn apply_wait_condition(
+    wait_for: &WaitCondition,
+    tab: &ChromeBrowserTab,
+    context: &InterpolationContext,
+) -> Result<()> {
+    if let Some(selector_template) = &wait_for.selector {
+        let selector = context.interpolate(selector_template)?;
+        println!("[executor] Waiting for selector: {}", selector);
+        tab.wait_for_selector(&selector).await?;
+    }
+    if let Some(expr_template) = &wait_for.function {
+        let expr = context.interpolate(expr_template)?;
+        println!("[executor] Waiting for function: {}", expr);
+        tab.wait_for_function(&expr).await?;
+    }
+    if let Some(delay) = wait_for.delay {
+        println!("[executor] Waiting {} seconds", delay);
+        tokio::time::sleep(std::time::Duration::from_secs_f64(delay)).await;
+    }
     Ok(())
 }
 
@@ -150,21 +163,21 @@ pub async fn execute_sniff(
             }
         };
 
-        let url = request.url().to_string();
-        let method = request.method();
-
         // Check URL pattern (regex)
+        let url = request.url().to_string();
         if !url_regex.is_match(&url) {
             continue;
         }
 
         // Check method filter
+        let method = request.method();
         if let Some(expected_method) = method_filter
             && method.as_str() != expected_method
         {
             continue;
         }
 
+        let headers = request.headers().clone();
         println!("[executor] Matched request: {}", &url[..url.len().min(80)]);
 
         // Get response body
@@ -216,11 +229,17 @@ pub async fn execute_sniff(
 
         for (output_name, extractor) in &step.extract {
             let extractor = interpolate_extractor(extractor, context)?;
-            match extract(&extractor, &body, &url) {
+            match extract(&extractor, &body, &url, Some(&headers)) {
                 Ok(value) => {
                     extracted.insert(output_name.clone(), value);
                 }
                 Err(_) => {
+                    // Missing request headers are optional: keep output
+                    // empty so content header resolution can skip them.
+                    if extractor.kind == ExtractorKind::Header {
+                        extracted.insert(output_name.clone(), String::new());
+                        continue;
+                    }
                     all_succeeded = false;
                     break;
                 }
@@ -469,7 +488,7 @@ async fn execute_fetch(
     let mut extracted = HashMap::new();
     for (output_name, extractor) in &step.extract {
         let extractor = interpolate_extractor(extractor, context)?;
-        let value = extract(&extractor, &body, &url)?;
+        let value = extract(&extractor, &body, &url, None)?;
         println!("[executor] Extracted {}.{}", step.name, output_name);
         extracted.insert(output_name.clone(), value);
     }
@@ -532,7 +551,7 @@ async fn execute_document(
     let mut extracted = HashMap::new();
     for (output_name, extractor) in &step.extract {
         let extractor = interpolate_extractor(extractor, context)?;
-        let value = extract(&extractor, &body, "")?;
+        let value = extract(&extractor, &body, "", None)?;
         println!("[executor] Extracted {}.{}", step.name, output_name);
         extracted.insert(output_name.clone(), value);
     }
@@ -645,7 +664,7 @@ async fn execute_fetch_in_browser(
     let mut extracted = HashMap::new();
     for (output_name, extractor) in &step.extract {
         let extractor = interpolate_extractor(extractor, context)?;
-        let value = extract(&extractor, &body, &response_url)?;
+        let value = extract(&extractor, &body, &response_url, None)?;
         println!("[executor] Extracted {}.{}", step.name, output_name);
         extracted.insert(output_name.clone(), value);
     }

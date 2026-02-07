@@ -323,6 +323,10 @@ pub enum ExtractorKind {
     */
     UrlRegex,
     /**
+        Extract a request header from the matched network request (Sniff only)
+    */
+    Header,
+    /**
         JSONPath query on JSON response body (returns single value)
     */
     JsonPath,
