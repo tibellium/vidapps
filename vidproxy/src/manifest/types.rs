@@ -274,6 +274,11 @@ pub struct Extractor {
     #[serde(default)]
     pub path: Option<String>,
     /**
+        Default value if extraction fails or capture group is missing (regex)
+    */
+    #[serde(default)]
+    pub default: Option<String>,
+    /**
         For jsonpath_regex: regex pattern to apply after JSONPath extraction
     */
     #[serde(default)]
@@ -328,6 +333,12 @@ pub enum ExtractorKind {
         Regex with capture group on response body
     */
     Regex,
+    /**
+        Regex over response body returning array of objects
+        Uses `each` to map fields to capture groups
+    */
+    #[serde(rename = "regex_array")]
+    RegexArray,
     /**
         First line containing ":" (for CDRM key response)
     */

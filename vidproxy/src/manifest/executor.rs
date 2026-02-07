@@ -7,12 +7,36 @@ use reqwest::{Client, Proxy};
 
 use super::extractors::{ExtractedArray, extract, extract_array};
 use super::interpolate::InterpolationContext;
-use super::types::{ExtractorKind, Step, StepKind};
+use super::types::{Extractor, ExtractorKind, Step, StepKind};
 
 /**
     User agent for HTTP fetch requests
 */
 const FETCH_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+/**
+    Interpolate extractor fields that can contain templates.
+*/
+fn interpolate_extractor(
+    extractor: &Extractor,
+    context: &InterpolationContext,
+) -> Result<Extractor> {
+    let mut interpolated = extractor.clone();
+
+    if let Some(path) = &extractor.path {
+        interpolated.path = Some(context.interpolate(path)?);
+    }
+
+    if let Some(regex) = &extractor.regex {
+        interpolated.regex = Some(context.interpolate(regex)?);
+    }
+
+    if let Some(default) = &extractor.default {
+        interpolated.default = Some(context.interpolate(default)?);
+    }
+
+    Ok(interpolated)
+}
 
 /**
     Execute a Navigate step.
@@ -66,7 +90,7 @@ pub enum SniffResult {
 pub async fn execute_sniff(
     step: &Step,
     requests: &mut NetworkRequestStream,
-    _context: &InterpolationContext,
+    context: &InterpolationContext,
 ) -> Result<SniffResult> {
     use std::time::Duration;
 
@@ -89,11 +113,10 @@ pub async fn execute_sniff(
 
     let deadline = tokio::time::Instant::now() + Duration::from_secs_f64(timeout_secs);
 
-    // Check if any extractor is jsonpath_array
-    let has_array_extractor = step
-        .extract
-        .values()
-        .any(|e| e.kind == ExtractorKind::JsonPathArray);
+    // Check if any extractor is array-capable
+    let has_array_extractor = step.extract.values().any(|e| {
+        e.kind == ExtractorKind::JsonPathArray || e.kind == ExtractorKind::RegexArray
+    });
 
     // Wait for matching request
     loop {
@@ -144,8 +167,11 @@ pub async fn execute_sniff(
         if has_array_extractor {
             // Find the array extractor
             for (output_name, extractor) in &step.extract {
-                if extractor.kind == ExtractorKind::JsonPathArray {
-                    match extract_array(extractor, &body) {
+                if extractor.kind == ExtractorKind::JsonPathArray
+                    || extractor.kind == ExtractorKind::RegexArray
+                {
+                    let extractor = interpolate_extractor(extractor, context)?;
+                    match extract_array(&extractor, &body) {
                         Ok(items) => {
                             println!(
                                 "[executor] Extracted {} items from {}.{}",
@@ -176,7 +202,8 @@ pub async fn execute_sniff(
         let mut all_succeeded = true;
 
         for (output_name, extractor) in &step.extract {
-            match extract(extractor, &body, &url) {
+            let extractor = interpolate_extractor(extractor, context)?;
+            match extract(&extractor, &body, &url) {
                 Ok(value) => {
                     extracted.insert(output_name.clone(), value);
                 }
@@ -205,7 +232,7 @@ pub async fn execute_sniff(
 pub async fn execute_sniff_many(
     step: &Step,
     requests: &mut NetworkRequestStream,
-    _context: &InterpolationContext,
+    context: &InterpolationContext,
 ) -> Result<SniffResult> {
     use std::time::Duration;
 
@@ -230,11 +257,10 @@ pub async fn execute_sniff_many(
     let deadline = tokio::time::Instant::now() + Duration::from_secs_f64(timeout_secs);
     let idle_duration = Duration::from_secs_f64(idle_timeout_secs);
 
-    // Check if any extractor is jsonpath_array
-    let has_array_extractor = step
-        .extract
-        .values()
-        .any(|e| e.kind == ExtractorKind::JsonPathArray);
+    // Check if any extractor is array-capable
+    let has_array_extractor = step.extract.values().any(|e| {
+        e.kind == ExtractorKind::JsonPathArray || e.kind == ExtractorKind::RegexArray
+    });
 
     // Collect all matching requests
     let mut all_items: ExtractedArray = Vec::new();
@@ -307,11 +333,14 @@ pub async fn execute_sniff_many(
         // Handle array extractor - aggregate items from all responses
         if has_array_extractor {
             for (output_name, extractor) in &step.extract {
-                if extractor.kind == ExtractorKind::JsonPathArray {
+                if extractor.kind == ExtractorKind::JsonPathArray
+                    || extractor.kind == ExtractorKind::RegexArray
+                {
                     if array_extractor_name.is_none() {
                         array_extractor_name = Some(output_name.clone());
                     }
-                    match extract_array(extractor, &body) {
+                    let extractor = interpolate_extractor(extractor, context)?;
+                    match extract_array(&extractor, &body) {
                         Ok(items) => {
                             println!(
                                 "[executor] SniffMany: extracted {} items from response",
@@ -343,7 +372,7 @@ pub async fn execute_sniff_many(
     }
 
     Err(anyhow!(
-        "SniffMany step '{}' requires a jsonpath_array extractor",
+        "SniffMany step '{}' requires a jsonpath_array or regex_array extractor",
         step.name
     ))
 }
@@ -386,17 +415,19 @@ async fn execute_fetch(
 
     println!("[executor] Fetched {} bytes", body.len());
 
-    // Check if any extractor is jsonpath_array
-    let has_array_extractor = step
-        .extract
-        .values()
-        .any(|e| e.kind == ExtractorKind::JsonPathArray);
+    // Check if any extractor is array-capable
+    let has_array_extractor = step.extract.values().any(|e| {
+        e.kind == ExtractorKind::JsonPathArray || e.kind == ExtractorKind::RegexArray
+    });
 
     // Handle array extractor specially
     if has_array_extractor {
         for (output_name, extractor) in &step.extract {
-            if extractor.kind == ExtractorKind::JsonPathArray {
-                let items = extract_array(extractor, &body)?;
+            if extractor.kind == ExtractorKind::JsonPathArray
+                || extractor.kind == ExtractorKind::RegexArray
+            {
+                let extractor = interpolate_extractor(extractor, context)?;
+                let items = extract_array(&extractor, &body)?;
                 println!(
                     "[executor] Extracted {} items from {}.{}",
                     items.len(),
@@ -414,7 +445,8 @@ async fn execute_fetch(
     // Run normal extractors
     let mut extracted = HashMap::new();
     for (output_name, extractor) in &step.extract {
-        let value = extract(extractor, &body, &url)?;
+        let extractor = interpolate_extractor(extractor, context)?;
+        let value = extract(&extractor, &body, &url)?;
         println!("[executor] Extracted {}.{}", step.name, output_name);
         extracted.insert(output_name.clone(), value);
     }

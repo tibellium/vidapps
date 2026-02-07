@@ -1,0 +1,151 @@
+source:
+  id: "caracol"
+  name: "Caracol TV"
+  country: "CO"
+  language: "es"
+  headless: false
+  proxy: "socks5://127.0.0.1:1080"
+
+# Discovery phase: open the live page and extract all available channels
+
+discovery:
+  outputs:
+    id: "${{find_channels.channels.id}}"
+    name: "${{find_channels.channels.name}}"
+    image: "${{find_channels.channels.image}}"
+    expires_in: 86400 # Refresh discovery daily
+
+  steps:
+    - name: "go_live"
+      kind: Navigate
+      url: "https://www.caracoltv.com/senal-vivo"
+      wait_for:
+        selector: "ps-list-live-stream"
+
+    - name: "find_channels"
+      kind: Fetch
+      url: "https://www.caracoltv.com/senal-vivo"
+      extract:
+        channels:
+          kind: regex_array
+          path: '(?s)<template id="signal-item-\d+">.*?<div class="LiveStreamModule-header-logo[^>]*>.*?<img[^>]+src="(?P<image>[^"]*?url=[^"]*?%2F(?P<image_id>[a-z0-9_-]+)\.png[^"]*)"[^>]*>.*?<h1 class="LiveStreamModule-title[^"]*">(?P<name>[^<]+)</h1>.*?(?:data-publicTokenEndpoint="https://ms-live\.noticiascaracol\.com/vide-public-token/(?P<token_id>[^"]+)"|data-signalLive="signalLive").*?</template>'
+          each:
+            id: "token_id|image_id"
+            name: "name"
+            image: "image"
+          unescape: true
+
+# Processing phase: rename and categorize channels
+
+process:
+  filter:
+    name:
+      - "Señal en vivo"
+      - "Señal en vivo Noticias Caracol"
+      - "Señal en vivo Blu Radio"
+      - "Señal en vivo La Kalle"
+  transforms:
+    - kind: Rename
+      name: "Señal en vivo"
+      to: "Caracol - Señal Principal"
+    - kind: Rename
+      name: "Señal en vivo Noticias Caracol"
+      to: "Caracol - Noticias"
+    - kind: Rename
+      name: "Señal en vivo Blu Radio"
+      to: "Caracol - Blu Radio"
+    - kind: Rename
+      name: "Señal en vivo La Kalle"
+      to: "Caracol - La Kalle"
+
+    - kind: AddCategory
+      name: "Caracol - Señal Principal"
+      category: "Caracol"
+    - kind: AddCategory
+      name: "Caracol - Noticias"
+      category: "Caracol"
+    - kind: AddCategory
+      name: "Caracol - Blu Radio"
+      category: "Caracol"
+    - kind: AddCategory
+      name: "Caracol - La Kalle"
+      category: "Caracol"
+
+    - kind: AddDescription
+      name: "Caracol - Señal Principal"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "Caracol - Noticias"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "Caracol - Blu Radio"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "Caracol - La Kalle"
+      description: "Transmisión en vivo 24/7"
+
+# Metadata phase: extract EPG data for Caracol TV
+
+metadata:
+  outputs:
+    programmes: "${{get_schedule.programmes}}"
+    expires_in: 3600 # Refresh EPG hourly
+
+  steps:
+    - name: "go_live"
+      kind: Navigate
+      url: "https://www.caracoltv.com/senal-vivo"
+
+    - name: "get_schedule"
+      kind: Fetch
+      url: "https://www.caracoltv.com/senal-vivo"
+      extract:
+        programmes:
+          kind: regex_array
+          path: '(?s)<ps-scheduleditem[^>]*data-title="(?P<title>[^"]+)"[^>]*data-starttime="(?P<start_time>\d+)"[^>]*data-endtime="(?P<end_time>\d+)"[^>]*>(?:.*?<img[^>]+src="(?P<image>[^"]+)")?.*?</ps-scheduleditem>'
+          each:
+            channel_id: "const:ctv"
+            title: "title"
+            start_time: "start_time"
+            end_time: "end_time"
+            image: "image"
+          unescape: true
+
+# Content phase: extract stream info for each channel
+
+content:
+  outputs:
+    manifest_url: "https://mdstrm.com/live-stream-playlist/${{get_channel_video.video_id}}.m3u8?access_token=${{get_token.access_token}}"
+
+  steps:
+    - name: "go_live"
+      kind: Navigate
+      url: "https://www.caracoltv.com/senal-vivo"
+
+    - name: "get_channel_video"
+      kind: Fetch
+      url: "https://www.caracoltv.com/senal-vivo"
+      extract:
+        video_id:
+          kind: regex
+          path: '(?s)<template id="signal-item-\d+">.*?(?:data-video-id="([^"]+)"[^>]*data-publicTokenEndpoint="https://ms-live\.noticiascaracol\.com/vide-public-token/${{channel.id}}"|url=[^"]*?%2F${{channel.id}}\.png[^"]*.*?data-video-id="([^"]+)").*?</template>'
+        token_path:
+          kind: regex
+          path: '(?s)<template id="signal-item-\d+">.*?(?:data-publicTokenEndpoint="https://ms-live\.noticiascaracol\.com/vide-public-token/(${{channel.id}})"|url=[^"]*?%2F${{channel.id}}\.png[^"]*.*?data-signalLive="signalLive").*?</template>'
+          default: "ctv"
+
+    - name: "get_token_video"
+      kind: Fetch
+      url: "https://www.caracoltv.com/senal-vivo"
+      extract:
+        token_video_id:
+          kind: regex
+          path: 'data-video-id="([^"]+)"[^>]*data-publicTokenEndpoint="https://ms-live\.noticiascaracol\.com/vide-public-token/${{get_channel_video.token_path}}"'
+
+    - name: "get_token"
+      kind: Fetch
+      url: "https://ms-live.noticiascaracol.com/vide-public-token/${{get_channel_video.token_path}}?id=${{get_token_video.token_video_id}}"
+      extract:
+        access_token:
+          kind: jsonpath
+          path: "$.access_token"

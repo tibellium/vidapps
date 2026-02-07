@@ -25,6 +25,7 @@ pub fn extract(extractor: &Extractor, content: &str, url: &str) -> Result<String
         ExtractorKind::JsonPathRegex => extract_jsonpath_regex(extractor, content),
         ExtractorKind::XPath => extract_xpath(extractor, content),
         ExtractorKind::Regex => extract_regex(extractor, content),
+        ExtractorKind::RegexArray => Err(anyhow!("Use extract_array() for regex_array extractors")),
         ExtractorKind::Line => extract_line(content),
         ExtractorKind::Pssh => extract_pssh(content, url),
     }?;
@@ -74,23 +75,30 @@ fn unescape_json_string(s: &str) -> String {
     nested array paths like `$.result[*].content.epg[*]`.
 */
 pub fn extract_array(extractor: &Extractor, content: &str) -> Result<ExtractedArray> {
-    if extractor.kind != ExtractorKind::JsonPathArray {
+    if extractor.kind != ExtractorKind::JsonPathArray && extractor.kind != ExtractorKind::RegexArray
+    {
         return Err(anyhow!(
-            "extract_array() only works with jsonpath_array extractors"
+            "extract_array() only works with jsonpath_array or regex_array extractors"
         ));
     }
 
-    let path = extractor
-        .path
-        .as_ref()
-        .ok_or_else(|| anyhow!("jsonpath_array extractor requires 'path'"))?;
+    match extractor.kind {
+        ExtractorKind::JsonPathArray => {
+            let path = extractor
+                .path
+                .as_ref()
+                .ok_or_else(|| anyhow!("jsonpath_array extractor requires 'path'"))?;
 
-    let each = extractor
-        .each
-        .as_ref()
-        .ok_or_else(|| anyhow!("jsonpath_array extractor requires 'each'"))?;
+            let each = extractor
+                .each
+                .as_ref()
+                .ok_or_else(|| anyhow!("jsonpath_array extractor requires 'each'"))?;
 
-    extract_jsonpath_array(content, path, each)
+            extract_jsonpath_array(content, path, each)
+        }
+        ExtractorKind::RegexArray => extract_regex_array(extractor, content),
+        _ => unreachable!("checked above"),
+    }
 }
 
 /**
@@ -450,12 +458,168 @@ fn extract_regex(extractor: &Extractor, content: &str) -> Result<String> {
         .captures(content)
         .ok_or_else(|| anyhow!("Regex '{}' did not match", pattern))?;
 
-    // Return first capture group, or whole match if no groups
+    // Return first capture group, or fall back to later groups if empty
     if captures.len() > 1 {
-        Ok(captures.get(1).unwrap().as_str().to_string())
-    } else {
-        Ok(captures.get(0).unwrap().as_str().to_string())
+        if let Some(m) = captures.get(1) {
+            return Ok(m.as_str().to_string());
+        }
+
+        for idx in 2..captures.len() {
+            if let Some(m) = captures.get(idx) {
+                return Ok(m.as_str().to_string());
+            }
+        }
+
+        if let Some(default) = &extractor.default {
+            return Ok(default.clone());
+        }
+        return Err(anyhow!(
+            "Regex '{}' matched but all capture groups were empty",
+            pattern
+        ));
     }
+
+    if let Some(m) = captures.get(0) {
+        return Ok(m.as_str().to_string());
+    }
+
+    if let Some(default) = &extractor.default {
+        return Ok(default.clone());
+    }
+
+    Err(anyhow!("Regex '{}' matched but returned empty", pattern))
+}
+
+/**
+    Extract multiple matches using regex, returning an array of objects.
+*/
+fn extract_regex_array(extractor: &Extractor, content: &str) -> Result<ExtractedArray> {
+    let pattern = extractor
+        .path
+        .as_ref()
+        .ok_or_else(|| anyhow!("regex_array extractor requires 'path'"))?;
+
+    let each = extractor
+        .each
+        .as_ref()
+        .ok_or_else(|| anyhow!("regex_array extractor requires 'each'"))?;
+
+    let re = Regex::new(pattern).map_err(|e| anyhow!("Invalid regex '{}': {}", pattern, e))?;
+
+    let mut extracted = Vec::new();
+
+    for captures in re.captures_iter(content) {
+        let mut fields: HashMap<String, Option<String>> = HashMap::new();
+
+        for (field_name, group_ref) in each {
+            let mut value: Option<String> = None;
+
+            for candidate in group_ref.split('|').map(|s| s.trim()) {
+                if candidate.is_empty() {
+                    continue;
+                }
+
+                if let Some(const_value) = candidate.strip_prefix("const:") {
+                    value = Some(const_value.to_string());
+                    break;
+                }
+
+                if let Ok(index) = candidate.parse::<usize>() {
+                    if let Some(m) = captures.get(index) {
+                        value = Some(m.as_str().to_string());
+                        break;
+                    }
+                    continue;
+                }
+
+                if let Some(m) = captures.name(candidate) {
+                    value = Some(m.as_str().to_string());
+                    break;
+                }
+            }
+
+            let value = if extractor.unescape {
+                value.map(|v| unescape_html_string(&v))
+            } else {
+                value
+            };
+
+            fields.insert(field_name.clone(), value);
+        }
+
+        if should_skip_item(&fields) {
+            continue;
+        }
+
+        extracted.push(fields);
+    }
+
+    if extracted.is_empty() {
+        return Err(anyhow!("Regex '{}' returned no results", pattern));
+    }
+
+    Ok(extracted)
+}
+
+/**
+    Decode common HTML entities and numeric character references.
+*/
+fn unescape_html_string(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch != '&' {
+            out.push(ch);
+            continue;
+        }
+
+        let mut entity = String::new();
+        while let Some(&c) = chars.peek() {
+            chars.next();
+            if c == ';' {
+                break;
+            }
+            entity.push(c);
+            // Avoid runaway entity parsing
+            if entity.len() > 12 {
+                break;
+            }
+        }
+
+        let decoded = match entity.as_str() {
+            "amp" => Some("&".to_string()),
+            "lt" => Some("<".to_string()),
+            "gt" => Some(">".to_string()),
+            "quot" => Some("\"".to_string()),
+            "#39" | "#x27" => Some("'".to_string()),
+            _ => {
+                if let Some(hex) = entity.strip_prefix("#x") {
+                    u32::from_str_radix(hex, 16)
+                        .ok()
+                        .and_then(char::from_u32)
+                        .map(|c| c.to_string())
+                } else if let Some(dec) = entity.strip_prefix('#') {
+                    dec.parse::<u32>()
+                        .ok()
+                        .and_then(char::from_u32)
+                        .map(|c| c.to_string())
+                } else {
+                    None
+                }
+            }
+        };
+
+        if let Some(decoded) = decoded {
+            out.push_str(&decoded);
+        } else {
+            out.push('&');
+            out.push_str(&entity);
+            out.push(';');
+        }
+    }
+
+    out
 }
 
 /**
@@ -502,6 +666,7 @@ mod tests {
         let extractor = Extractor {
             kind: ExtractorKind::Url,
             path: None,
+            default: None,
             regex: None,
             each: None,
             unescape: false,
@@ -515,6 +680,7 @@ mod tests {
         let extractor = Extractor {
             kind: ExtractorKind::Line,
             path: None,
+            default: None,
             regex: None,
             each: None,
             unescape: false,
@@ -529,6 +695,7 @@ mod tests {
         let extractor = Extractor {
             kind: ExtractorKind::Regex,
             path: Some(r"id=(\d+)".to_string()),
+            default: None,
             regex: None,
             each: None,
             unescape: false,
@@ -576,6 +743,7 @@ mod tests {
         let extractor = Extractor {
             kind: ExtractorKind::Regex,
             path: Some(r"url=(https://[^\s]+)".to_string()),
+            default: None,
             regex: None,
             each: None,
             unescape: true,
@@ -595,6 +763,7 @@ mod tests {
         let extractor = Extractor {
             kind: ExtractorKind::JsonPathArray,
             path: Some("$.items[*]".to_string()),
+            default: None,
             regex: None,
             each: Some(each),
             unescape: false,
@@ -643,6 +812,7 @@ mod tests {
         let extractor = Extractor {
             kind: ExtractorKind::JsonPathArray,
             path: Some("$.result[*].content.epg[*]".to_string()),
+            default: None,
             regex: None,
             each: Some(each),
             unescape: false,
