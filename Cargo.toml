@@ -2,9 +2,11 @@
 resolver = "2"
 members = [
     "drm/core",
-    "drm/widevine",
-    "drm/cli",
     "drm/widevine-proto",
+    "drm/widevine",
+    "drm/playready-format",
+    "drm/playready",
+    "drm/cli",
     "vidwall",
     "vidplayer",
     "vidproxy",
