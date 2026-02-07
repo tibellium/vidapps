@@ -1,7 +1,7 @@
 use core::fmt;
 use core::str::FromStr;
 
-use crate::error::ParseError;
+use crate::error::{ContentKeyError, ParseError};
 use crate::utils::{bytes_equal, eq_ignore_ascii_case, trim_ascii};
 /**
     Key type enumeration from License.KeyContainer.KeyType.
@@ -245,26 +245,64 @@ impl fmt::Display for SystemId {
 */
 #[derive(Clone, PartialEq, Eq)]
 pub struct ContentKey {
-    /**
-        Key ID: 16 bytes, from KeyContainer.id (proto field 1),
-        normalized via kid_to_uuid conversion (see parse_license_response step 8c).
-    */
-    pub kid: [u8; 16],
-    /**
-        Decrypted content key from KeyContainer.key (proto field 3)
-        after AES-CBC decryption with enc_key and KeyContainer.iv (proto field 2),
-        then PKCS#7 unpadding. Typically 16 bytes for AES-128 content, but the
-        protocol does not constrain key length — Vec<u8> is used intentionally.
-    */
-    pub key: Vec<u8>,
-    /**
-        Key type from KeyContainer.type (proto field 4).
-        All types are decrypted and stored; consumers typically filter to CONTENT for output.
-    */
-    pub key_type: KeyType,
+    kid: [u8; 16],
+    key: Vec<u8>,
+    key_type: KeyType,
 }
 
 impl ContentKey {
+    /**
+        Create a new content key with [`KeyType::Content`] (the common case).
+    */
+    pub fn new(kid: impl AsRef<[u8]>, key: impl AsRef<[u8]>) -> Result<Self, ContentKeyError> {
+        Self::new_with_type(kid, key, KeyType::Content)
+    }
+
+    /**
+        Create a new content key with a specific key type.
+    */
+    pub fn new_with_type(
+        kid: impl AsRef<[u8]>,
+        key: impl AsRef<[u8]>,
+        key_type: KeyType,
+    ) -> Result<Self, ContentKeyError> {
+        let kid_bytes: &[u8] = kid.as_ref();
+        let kid: [u8; 16] = kid_bytes
+            .try_into()
+            .map_err(|_| ContentKeyError::InvalidKidLength(kid_bytes.len()))?;
+        let key: &[u8] = key.as_ref();
+        if key.is_empty() {
+            return Err(ContentKeyError::EmptyKey);
+        }
+        Ok(Self {
+            kid,
+            key: key.to_vec(),
+            key_type,
+        })
+    }
+
+    /**
+        16-byte key identifier.
+    */
+    pub fn kid(&self) -> [u8; 16] {
+        self.kid
+    }
+
+    /**
+        Decrypted key bytes. Typically 16 bytes for AES-128 content,
+        but the protocol does not constrain key length.
+    */
+    pub fn key(&self) -> &[u8] {
+        &self.key
+    }
+
+    /**
+        Key type (content, signing, etc.).
+    */
+    pub fn key_type(&self) -> KeyType {
+        self.key_type
+    }
+
     /**
         Key ID as a lowercase hex string.
     */
@@ -298,16 +336,130 @@ impl fmt::Debug for ContentKey {
     }
 }
 
+/**
+    Parse a content key from `kid_hex:key_hex` format (e.g. `00...01:abcdef01`).
+
+    The key type defaults to [`KeyType::Content`].
+*/
+impl FromStr for ContentKey {
+    type Err = ContentKeyError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (kid_hex, key_hex) = s.split_once(':').ok_or(ContentKeyError::InvalidFormat)?;
+        let kid =
+            hex::decode(kid_hex.trim()).map_err(|e| ContentKeyError::InvalidHex(e.to_string()))?;
+        let key =
+            hex::decode(key_hex.trim()).map_err(|e| ContentKeyError::InvalidHex(e.to_string()))?;
+        Self::new(kid, key)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use hex_literal::hex;
+
+    use crate::error::ContentKeyError;
+
     fn sample_key() -> ContentKey {
-        ContentKey {
-            kid: hex!("00000000000000000000000000000001"),
-            key: vec![0xab, 0xcd, 0xef, 0x01],
-            key_type: KeyType::Content,
-        }
+        ContentKey::new(
+            hex!("00000000000000000000000000000001"),
+            vec![0xab, 0xcd, 0xef, 0x01],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn new_defaults_to_content_type() {
+        let key = sample_key();
+        assert_eq!(key.key_type(), KeyType::Content);
+    }
+
+    #[test]
+    fn new_with_type_sets_type() {
+        let key = ContentKey::new_with_type([0; 16], vec![0x01], KeyType::Signing).unwrap();
+        assert_eq!(key.key_type(), KeyType::Signing);
+    }
+
+    #[test]
+    fn empty_key_rejected() {
+        let err = ContentKey::new([0; 16], vec![]).unwrap_err();
+        assert_eq!(err, ContentKeyError::EmptyKey);
+    }
+
+    #[test]
+    fn invalid_kid_length_rejected() {
+        let err = ContentKey::new([0; 15], vec![0x01]).unwrap_err();
+        assert_eq!(err, ContentKeyError::InvalidKidLength(15));
+        let err = ContentKey::new([0; 17], vec![0x01]).unwrap_err();
+        assert_eq!(err, ContentKeyError::InvalidKidLength(17));
+    }
+
+    #[test]
+    fn new_accepts_slice_and_vec() {
+        // &[u8; 16]
+        let key = ContentKey::new([0u8; 16], vec![0x01]).unwrap();
+        assert_eq!(key.kid(), [0; 16]);
+        // Vec<u8> for kid
+        let key = ContentKey::new(vec![0u8; 16], vec![0x01]).unwrap();
+        assert_eq!(key.kid(), [0; 16]);
+        // &[u8] slice for key
+        let key = ContentKey::new([0u8; 16], [0x01u8]).unwrap();
+        assert_eq!(key.key(), &[0x01]);
+    }
+
+    #[test]
+    fn from_str_valid() {
+        let key: ContentKey = "00000000000000000000000000000001:abcdef01".parse().unwrap();
+        assert_eq!(key.kid(), hex!("00000000000000000000000000000001"));
+        assert_eq!(key.key(), &hex!("abcdef01"));
+        assert_eq!(key.key_type(), KeyType::Content);
+    }
+
+    #[test]
+    fn from_str_round_trip() {
+        let original = sample_key();
+        let parsed: ContentKey = original.to_string().parse().unwrap();
+        assert_eq!(original, parsed);
+    }
+
+    #[test]
+    fn from_str_with_whitespace() {
+        let key: ContentKey = " 00000000000000000000000000000001 : abcdef01 "
+            .parse()
+            .unwrap();
+        assert_eq!(key.kid(), hex!("00000000000000000000000000000001"));
+        assert_eq!(key.key(), &hex!("abcdef01"));
+    }
+
+    #[test]
+    fn from_str_missing_colon() {
+        let err = "00000000000000000000000000000001"
+            .parse::<ContentKey>()
+            .unwrap_err();
+        assert_eq!(err, ContentKeyError::InvalidFormat);
+    }
+
+    #[test]
+    fn from_str_invalid_hex() {
+        let err = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz:abcdef01"
+            .parse::<ContentKey>()
+            .unwrap_err();
+        assert!(matches!(err, ContentKeyError::InvalidHex(_)));
+    }
+
+    #[test]
+    fn from_str_wrong_kid_length() {
+        let err = "0001:abcdef01".parse::<ContentKey>().unwrap_err();
+        assert!(matches!(err, ContentKeyError::InvalidKidLength(_)));
+    }
+
+    #[test]
+    fn accessors_return_correct_values() {
+        let key = sample_key();
+        assert_eq!(key.kid(), hex!("00000000000000000000000000000001"));
+        assert_eq!(key.key(), &[0xab, 0xcd, 0xef, 0x01]);
+        assert_eq!(key.key_type(), KeyType::Content);
     }
 
     #[test]
@@ -326,11 +478,7 @@ mod tests {
 
     #[test]
     fn content_key_debug_signing() {
-        let key = ContentKey {
-            kid: [0xFF; 16],
-            key: vec![0x00],
-            key_type: KeyType::Signing,
-        };
+        let key = ContentKey::new_with_type([0xFF; 16], vec![0x00], KeyType::Signing).unwrap();
         let s = format!("{key:?}");
         assert!(s.starts_with("[SIGNING]"));
     }

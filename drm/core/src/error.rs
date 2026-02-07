@@ -26,3 +26,18 @@ pub struct ParseError {
     pub kind: &'static str,
     pub value: String,
 }
+
+/**
+    Errors from [`ContentKey`](crate::ContentKey) construction.
+*/
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum ContentKeyError {
+    #[error("content key is empty")]
+    EmptyKey,
+    #[error("key ID must be 16 bytes, got {0}")]
+    InvalidKidLength(usize),
+    #[error("invalid hex in content key: {0}")]
+    InvalidHex(String),
+    #[error("expected format 'kid_hex:key_hex'")]
+    InvalidFormat,
+}

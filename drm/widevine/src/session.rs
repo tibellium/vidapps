@@ -331,11 +331,10 @@ impl Session {
             let kid_raw = container.id.as_deref().unwrap_or_default();
             let kid = kid_to_uuid(kid_raw);
 
-            keys.push(ContentKey {
-                kid,
-                key: key_bytes,
-                key_type,
-            });
+            keys.push(
+                ContentKey::new_with_type(kid, key_bytes, key_type)
+                    .expect("decrypted key should not be empty"),
+            );
         }
 
         if keys.is_empty() {
@@ -366,7 +365,7 @@ impl Session {
     pub fn keys_of_type(&self, key_type: KeyType) -> Vec<&ContentKey> {
         self.content_keys
             .iter()
-            .filter(|k| k.key_type == key_type)
+            .filter(|k| k.key_type() == key_type)
             .collect()
     }
 
@@ -374,7 +373,7 @@ impl Session {
         Look up a key by its 16-byte key ID. Returns the first match regardless of type.
     */
     pub fn key_by_kid(&self, kid: [u8; 16]) -> Option<&ContentKey> {
-        self.content_keys.iter().find(|k| k.kid == kid)
+        self.content_keys.iter().find(|k| k.kid() == kid)
     }
 }
 

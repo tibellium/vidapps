@@ -285,7 +285,7 @@ impl Session {
     pub fn keys_of_type(&self, key_type: KeyType) -> Vec<&ContentKey> {
         self.content_keys
             .iter()
-            .filter(|k| k.key_type == key_type)
+            .filter(|k| k.key_type() == key_type)
             .collect()
     }
 
@@ -293,7 +293,7 @@ impl Session {
         Look up a key by its 16-byte key ID.
     */
     pub fn key_by_kid(&self, kid: [u8; 16]) -> Option<&ContentKey> {
-        self.content_keys.iter().find(|k| k.kid == kid)
+        self.content_keys.iter().find(|k| k.kid() == kid)
     }
 }
 
@@ -817,11 +817,7 @@ fn extract_standard_key(
     // Convert PlayReady GUID key_id to standard UUID byte order
     let kid = kid_to_uuid(&ck_obj.key_id);
 
-    Ok(ContentKey {
-        kid,
-        key: content_key.to_vec(),
-        key_type: KeyType::Content,
-    })
+    Ok(ContentKey::new(kid, content_key).expect("decrypted key should not be empty"))
 }
 
 /**
@@ -914,11 +910,7 @@ fn extract_scalable_key(
 
     let kid = kid_to_uuid(&ck_obj.key_id);
 
-    Ok(ContentKey {
-        kid,
-        key: final_ck.to_vec(),
-        key_type: KeyType::Content,
-    })
+    Ok(ContentKey::new(kid, final_ck).expect("decrypted key should not be empty"))
 }
 
 /**

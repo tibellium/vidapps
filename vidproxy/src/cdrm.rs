@@ -117,7 +117,7 @@ pub async fn fetch_decryption_keys(pssh_b64: &str, license_url: &str) -> Result<
 
     let content_keys: Vec<String> = keys
         .iter()
-        .filter(|k| k.key_type == drm_widevine::core::KeyType::Content)
+        .filter(|k| k.key_type() == drm_widevine::core::KeyType::Content)
         .map(|k| format!("{}:{}", k.kid_hex(), k.key_hex()))
         .collect();
 
