@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Args;
+use drm_widevine::WidevineExt;
 
 /**
     Inspect a PSSH box.
@@ -12,21 +13,20 @@ pub struct PsshCommand {
 
 impl PsshCommand {
     pub fn run(self) -> Result<()> {
-        let pssh = wdv3::PsshBox::from_base64(&self.base64).context("failed to parse PSSH box")?;
+        let pssh =
+            drm_widevine::PsshBox::from_base64(&self.base64).context("failed to parse PSSH box")?;
 
         println!("Version:    {}", pssh.version);
         println!("System ID:  {}", hex::encode(pssh.system_id));
         println!("Data Size:  {} bytes", pssh.data.len());
 
-        match pssh.key_ids() {
-            Ok(kids) if !kids.is_empty() => {
-                println!();
-                println!("Key IDs ({}):", kids.len());
-                for kid in &kids {
-                    println!("  {}", hex::encode(kid));
-                }
+        let kids = pssh.key_ids();
+        if !kids.is_empty() {
+            println!();
+            println!("Key IDs ({}):", kids.len());
+            for kid in kids {
+                println!("  {}", hex::encode(kid));
             }
-            _ => {}
         }
 
         if let Ok(pssh_data) = pssh.widevine_pssh_data()

@@ -3,11 +3,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use ::rsa::{BigUint, pkcs1::EncodeRsaPublicKey};
-use prost::Message;
 use rand::Rng;
 
-use wdv3_proto::{
-    DrmCertificate, License, LicenseRequest, SignedDrmCertificate, SignedMessage,
+use drm_widevine_proto::{
+    DrmCertificate, License, LicenseRequest, SignedDrmCertificate, SignedMessage, prost::Message,
     signed_message::MessageType,
 };
 
@@ -18,9 +17,10 @@ use crate::constants::{
 };
 use crate::crypto::{aes, hmac, padding, privacy, rsa};
 use crate::device::Device;
+use drm_core::{ContentKey, KeyType, PsshBox};
+
 use crate::error::{CdmError, CdmResult};
-use crate::pssh::PsshBox;
-use crate::types::{ContentKey, DeviceType, KeyType, LicenseType};
+use crate::types::{DeviceType, LicenseType};
 
 /**
     Global session counter for monotonically-increasing session numbers.
@@ -167,12 +167,12 @@ impl Session {
         let request_id = generate_request_id(self.device.device_type, self.number);
 
         // Build ContentIdentification with WidevinePsshData
-        use wdv3_proto::license_request::ContentIdentification;
-        use wdv3_proto::license_request::RequestType;
-        use wdv3_proto::license_request::content_identification::ContentIdVariant;
-        use wdv3_proto::license_request::content_identification::WidevinePsshData as PsshContentId;
+        use drm_widevine_proto::license_request::ContentIdentification;
+        use drm_widevine_proto::license_request::RequestType;
+        use drm_widevine_proto::license_request::content_identification::ContentIdVariant;
+        use drm_widevine_proto::license_request::content_identification::WidevinePsshData as PsshContentId;
 
-        let proto_license_type: wdv3_proto::LicenseType = license_type.into();
+        let proto_license_type: drm_widevine_proto::LicenseType = license_type.into();
 
         let content_id = ContentIdentification {
             content_id_variant: Some(ContentIdVariant::WidevinePsshData(PsshContentId {
@@ -322,10 +322,11 @@ impl Session {
 
             // Map the proto key type to our KeyType; skip unrecognized (value 0)
             let proto_type = container.r#type.unwrap_or(0);
-            let key_type = match wdv3_proto::license::key_container::KeyType::try_from(proto_type) {
-                Ok(kt) => KeyType::from(kt),
-                Err(_) => continue,
-            };
+            let key_type =
+                match drm_widevine_proto::license::key_container::KeyType::try_from(proto_type) {
+                    Ok(kt) => KeyType::from(kt),
+                    Err(_) => continue,
+                };
 
             // Normalize the key ID to 16 bytes
             let kid_raw = container.id.as_deref().unwrap_or_default();
@@ -494,9 +495,9 @@ fn kid_to_uuid(kid: &[u8]) -> [u8; 16] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use drm_widevine_proto::license_request::content_identification::ContentIdVariant;
+    use drm_widevine_proto::prost::Message;
     use hex_literal::hex;
-    use prost::Message;
-    use wdv3_proto::license_request::content_identification::ContentIdVariant;
 
     const TEST_WVD: &[u8] = include_bytes!("../testfiles/device.wvd");
     const TEST_CERT: &[u8] = include_bytes!("../testfiles/application-certificate");
@@ -508,7 +509,7 @@ mod tests {
     /// Build a minimal v0 Widevine PSSH box wrapping a WidevinePsshData proto.
     fn test_pssh() -> PsshBox {
         let kid = hex!("00000000000000000000000000000001");
-        let pssh_data = wdv3_proto::WidevinePsshData {
+        let pssh_data = drm_widevine_proto::WidevinePsshData {
             key_ids: vec![kid.to_vec()],
             ..Default::default()
         };
@@ -598,7 +599,7 @@ mod tests {
         let lr = LicenseRequest::decode(signed.msg.unwrap().as_slice()).unwrap();
         assert_eq!(
             lr.r#type,
-            Some(wdv3_proto::license_request::RequestType::New as i32)
+            Some(drm_widevine_proto::license_request::RequestType::New as i32)
         );
         assert_eq!(lr.protocol_version, Some(21));
         assert!(lr.request_time.is_some());
@@ -676,7 +677,7 @@ mod tests {
             ContentIdVariant::WidevinePsshData(data) => {
                 assert_eq!(
                     data.license_type,
-                    Some(wdv3_proto::LicenseType::Offline as i32)
+                    Some(drm_widevine_proto::LicenseType::Offline as i32)
                 );
             }
             other => panic!("expected WidevinePsshData, got {other:?}"),

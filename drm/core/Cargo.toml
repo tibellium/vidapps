@@ -1,11 +1,11 @@
 [package]
-name = "wdv3-proto"
+name = "drm-core"
 version = { workspace = true }
 edition = { workspace = true }
 publish = { workspace = true }
 
 [dependencies]
-prost = "0.14"
-
-[build-dependencies]
-prost-build = "0.14"
+data-encoding = "2"
+hex = "0.4"
+hex-literal = "1.1"
+thiserror = "2"

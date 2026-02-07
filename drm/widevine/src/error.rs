@@ -1,13 +1,17 @@
 use thiserror::Error;
 
-use crate::types::SystemId;
+use drm_core::PsshError;
 
 /**
-    Errors specific to the CDM protocol exchange.
+    Errors specific to the Widevine CDM protocol exchange.
 */
 #[derive(Debug, Clone, Error)]
 pub enum CdmError {
-    // ── Encoding ───────────────────────────────────────────────────────
+    // ── PSSH (delegated to drm-core) ──────────────────────────────────
+    #[error(transparent)]
+    PsshCore(#[from] PsshError),
+
+    // ── Base64 ─────────────────────────────────────────────────────────
     #[error("invalid base64: {0}")]
     InvalidBase64(String),
 
@@ -24,12 +28,6 @@ pub enum CdmError {
     WvdBadSecurityLevel(u8),
     #[error("WVD field too large to serialize ({0} bytes, max 65535)")]
     WvdFieldTooLarge(usize),
-
-    // ── PSSH box parsing ──────────────────────────────────────────────
-    #[error("malformed PSSH box: {0}")]
-    PsshMalformed(String),
-    #[error("PSSH system ID is {0}, expected {1}")]
-    PsshSystemIdMismatch(SystemId, SystemId),
 
     // ── Protobuf ──────────────────────────────────────────────────────
     #[error("protobuf decode failed: {0}")]
@@ -64,8 +62,8 @@ pub enum CdmError {
     ContextNotFound,
 }
 
-impl From<prost::DecodeError> for CdmError {
-    fn from(e: prost::DecodeError) -> Self {
+impl From<drm_widevine_proto::prost::DecodeError> for CdmError {
+    fn from(e: drm_widevine_proto::prost::DecodeError) -> Self {
         Self::ProtobufDecode(e.to_string())
     }
 }
@@ -74,13 +72,3 @@ impl From<prost::DecodeError> for CdmError {
     Type alias for results that may return a [`CdmError`].
 */
 pub type CdmResult<T> = std::result::Result<T, CdmError>;
-
-/**
-    Error returned by `FromStr` implementations on enum types.
-*/
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-#[error("unknown {kind} '{value}'")]
-pub struct ParseError {
-    pub kind: &'static str,
-    pub value: String,
-}

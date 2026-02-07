@@ -1805,6 +1805,59 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 
 [[package]]
+name = "drm-cli"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "drm-widevine",
+ "hex",
+ "reqwest 0.13.1",
+ "rsa",
+ "tokio",
+]
+
+[[package]]
+name = "drm-core"
+version = "0.0.0"
+dependencies = [
+ "data-encoding",
+ "hex",
+ "hex-literal",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "drm-widevine"
+version = "0.0.0"
+dependencies = [
+ "aes",
+ "cmac",
+ "data-encoding",
+ "drm-core",
+ "drm-widevine-proto",
+ "hex",
+ "hex-literal",
+ "hmac",
+ "include_dir",
+ "rand 0.9.2",
+ "rsa",
+ "sha1",
+ "sha2",
+ "signature",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "drm-widevine-proto"
+version = "0.0.0"
+dependencies = [
+ "drm-core",
+ "prost",
+ "prost-build",
+]
+
+[[package]]
 name = "dtor"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7311,6 +7364,7 @@ dependencies = [
  "chrome-browser",
  "chrono",
  "clap",
+ "drm-widevine",
  "ffmpeg-sink",
  "ffmpeg-source",
  "ffmpeg-types",
@@ -7330,7 +7384,6 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tower-http",
- "wdv3",
 ]
 
 [[package]]
@@ -7578,48 +7631,6 @@ dependencies = [
  "log",
  "once_cell",
  "pkg-config",
-]
-
-[[package]]
-name = "wdv3"
-version = "0.0.0"
-dependencies = [
- "aes",
- "cmac",
- "data-encoding",
- "hex",
- "hex-literal",
- "hmac",
- "include_dir",
- "prost",
- "rand 0.9.2",
- "rsa",
- "sha1",
- "sha2",
- "signature",
- "thiserror 2.0.18",
- "wdv3-proto",
-]
-
-[[package]]
-name = "wdv3-cli"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "hex",
- "reqwest 0.13.1",
- "rsa",
- "tokio",
- "wdv3",
-]
-
-[[package]]
-name = "wdv3-proto"
-version = "0.0.0"
-dependencies = [
- "prost",
- "prost-build",
 ]
 
 [[package]]

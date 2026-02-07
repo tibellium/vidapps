@@ -1,7 +1,4 @@
-use prost::Message;
-
-use crate::constants::WIDEVINE_SYSTEM_ID;
-use crate::error::{CdmError, CdmResult};
+use crate::error::PsshError;
 use crate::types::SystemId;
 
 /**
@@ -30,8 +27,7 @@ pub struct PsshBox {
     */
     pub flags: [u8; 3],
     /**
-        16-byte DRM system identifier. For Widevine this must match
-        `WIDEVINE_SYSTEM_ID` (EDEF8BA9-79D6-4ACE-A3C8-27DCD51D21ED).
+        16-byte DRM system identifier.
     */
     pub system_id: [u8; 16],
     /**
@@ -39,7 +35,8 @@ pub struct PsshBox {
     */
     pub key_ids: Vec<[u8; 16]>,
     /**
-        Raw data payload — for Widevine, a serialized WidevinePsshData protobuf.
+        Raw data payload. For Widevine this is a serialized WidevinePsshData
+        protobuf; for PlayReady it is a PlayReady Header Object; etc.
     */
     pub data: Vec<u8>,
 }
@@ -48,17 +45,17 @@ impl PsshBox {
     /**
         Parse a base64-encoded PSSH box.
     */
-    pub fn from_base64(pssh: &str) -> CdmResult<Self> {
+    pub fn from_base64(pssh: &str) -> Result<Self, PsshError> {
         let bytes = data_encoding::BASE64
             .decode(pssh.as_bytes())
-            .map_err(|e| CdmError::InvalidBase64(format!("PSSH: {e}")))?;
+            .map_err(|e| PsshError::InvalidBase64(format!("PSSH: {e}")))?;
         Self::from_bytes(&bytes)
     }
 
     /**
         Parse a PSSH box from raw bytes (full ISOBMFF box starting with box_size).
     */
-    pub fn from_bytes(input: &[u8]) -> CdmResult<Self> {
+    pub fn from_bytes(input: &[u8]) -> Result<Self, PsshError> {
         // Minimum: 4 (size) + 4 (type) + 1 (ver) + 3 (flags) + 16 (sysid) + 4 (data_size) = 32
         if input.len() < 32 {
             return Err(pssh_err("input too short for PSSH box header"));
@@ -84,12 +81,6 @@ impl PsshBox {
 
         let mut system_id = [0u8; 16];
         system_id.copy_from_slice(&box_data[12..28]);
-
-        if system_id != WIDEVINE_SYSTEM_ID {
-            let detected = SystemId::from_bytes(system_id);
-            let expected = SystemId::Widevine;
-            return Err(CdmError::PsshSystemIdMismatch(detected, expected));
-        }
 
         let mut offset = 28;
         let mut key_ids = Vec::new();
@@ -184,31 +175,14 @@ impl PsshBox {
     }
 
     /**
-        Extract key IDs, preferring the box header (v1) over protobuf parsing (v0).
+        Key IDs from the box header (v1 only).
 
-        - v1: returns the key IDs stored in the box header directly.
-        - v0: decodes `self.data` as a WidevinePsshData protobuf and extracts
-          the `key_id` repeated field.
+        Returns the key IDs stored in the PSSH box header. For v0 boxes this
+        is always empty — DRM-specific code must parse the data payload to
+        extract key IDs (e.g. from a WidevinePsshData protobuf).
     */
-    pub fn key_ids(&self) -> CdmResult<Vec<[u8; 16]>> {
-        if self.version == 1 {
-            return Ok(self.key_ids.clone());
-        }
-
-        let pssh_data = self.widevine_pssh_data()?;
-        let mut kids = Vec::with_capacity(pssh_data.key_ids.len());
-        for raw_kid in &pssh_data.key_ids {
-            if raw_kid.len() != 16 {
-                return Err(pssh_err(&format!(
-                    "key_id length {} (expected 16)",
-                    raw_kid.len()
-                )));
-            }
-            let mut kid = [0u8; 16];
-            kid.copy_from_slice(raw_kid);
-            kids.push(kid);
-        }
-        Ok(kids)
+    pub fn key_ids(&self) -> &[[u8; 16]] {
+        &self.key_ids
     }
 
     /**
@@ -226,10 +200,16 @@ impl PsshBox {
     }
 
     /**
-        Decode the data payload as a WidevinePsshData protobuf.
+        Check that this PSSH box belongs to the given DRM system.
+        Returns `Err(PsshError::SystemIdMismatch)` if it does not.
     */
-    pub fn widevine_pssh_data(&self) -> CdmResult<wdv3_proto::WidevinePsshData> {
-        wdv3_proto::WidevinePsshData::decode(self.data.as_slice()).map_err(CdmError::from)
+    pub fn ensure_system_id(&self, expected: SystemId) -> Result<(), PsshError> {
+        let actual = self.system_id();
+        if actual == expected {
+            Ok(())
+        } else {
+            Err(PsshError::SystemIdMismatch(actual, expected))
+        }
     }
 }
 
@@ -242,7 +222,7 @@ fn read_u32_be(data: &[u8], offset: usize) -> u32 {
     ])
 }
 
-fn check_bounds(data: &[u8], offset: usize, need: usize, field: &str) -> CdmResult<()> {
+fn check_bounds(data: &[u8], offset: usize, need: usize, field: &str) -> Result<(), PsshError> {
     if offset + need > data.len() {
         Err(pssh_err(&format!("truncated {field}")))
     } else {
@@ -250,15 +230,14 @@ fn check_bounds(data: &[u8], offset: usize, need: usize, field: &str) -> CdmResu
     }
 }
 
-fn pssh_err(msg: &str) -> CdmError {
-    CdmError::PsshMalformed(msg.into())
+fn pssh_err(msg: &str) -> PsshError {
+    PsshError::Malformed(msg.into())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use hex_literal::hex;
-    use prost::Message;
 
     const WV_SYSID: [u8; 16] = hex!("edef8ba979d64acea3c827dcd51d21ed");
 
@@ -320,8 +299,7 @@ mod tests {
         assert_eq!(pssh.key_ids[1], kid2);
         assert_eq!(pssh.data, data);
         // v1 key_ids() returns box header kids
-        let kids = pssh.key_ids().unwrap();
-        assert_eq!(kids, vec![kid1, kid2]);
+        assert_eq!(pssh.key_ids(), &[kid1, kid2]);
     }
 
     #[test]
@@ -342,27 +320,28 @@ mod tests {
     }
 
     #[test]
-    fn v0_key_ids_from_protobuf() {
-        // Build a WidevinePsshData protobuf with a key_id
-        let kid = hex!("01020304050607080910111213141516");
-        let pssh_data = wdv3_proto::WidevinePsshData {
-            key_ids: vec![kid.to_vec()],
-            ..Default::default()
-        };
-        let data_bytes = pssh_data.encode_to_vec();
-        let raw = build_v0_pssh(&data_bytes);
+    fn any_system_id_accepted() {
+        let mut raw = build_v0_pssh(b"data");
+        // Change system ID to something unknown
+        raw[12] = 0xFF;
         let pssh = PsshBox::from_bytes(&raw).unwrap();
-        let kids = pssh.key_ids().unwrap();
-        assert_eq!(kids, vec![kid]);
+        assert!(pssh.system_id().is_unknown());
     }
 
     #[test]
-    fn wrong_system_id() {
+    fn ensure_system_id_mismatch() {
         let mut raw = build_v0_pssh(b"data");
-        // Corrupt system ID
         raw[12] = 0xFF;
-        let err = PsshBox::from_bytes(&raw).unwrap_err();
-        assert!(matches!(err, CdmError::PsshSystemIdMismatch(_, _)));
+        let pssh = PsshBox::from_bytes(&raw).unwrap();
+        let err = pssh.ensure_system_id(SystemId::Widevine).unwrap_err();
+        assert!(matches!(err, PsshError::SystemIdMismatch(_, _)));
+    }
+
+    #[test]
+    fn ensure_system_id_match() {
+        let raw = build_v0_pssh(b"data");
+        let pssh = PsshBox::from_bytes(&raw).unwrap();
+        pssh.ensure_system_id(SystemId::Widevine).unwrap();
     }
 
     #[test]
@@ -370,13 +349,13 @@ mod tests {
         let mut raw = build_v0_pssh(b"data");
         raw[4..8].copy_from_slice(b"moof");
         let err = PsshBox::from_bytes(&raw).unwrap_err();
-        assert!(matches!(err, CdmError::PsshMalformed(_)));
+        assert!(matches!(err, PsshError::Malformed(_)));
     }
 
     #[test]
     fn truncated_input() {
         let err = PsshBox::from_bytes(&[0u8; 10]).unwrap_err();
-        assert!(matches!(err, CdmError::PsshMalformed(_)));
+        assert!(matches!(err, PsshError::Malformed(_)));
     }
 
     #[test]
@@ -384,6 +363,6 @@ mod tests {
         let mut raw = build_v0_pssh(b"data");
         raw[8] = 2; // version 2 not supported
         let err = PsshBox::from_bytes(&raw).unwrap_err();
-        assert!(matches!(err, CdmError::PsshMalformed(_)));
+        assert!(matches!(err, PsshError::Malformed(_)));
     }
 }

@@ -1,9 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    "drm/wdv3",
-    "drm/wdv3-cli",
-    "drm/wdv3-proto",
+    "drm/core",
+    "drm/widevine",
+    "drm/cli",
+    "drm/widevine-proto",
     "vidwall",
     "vidplayer",
     "vidproxy",

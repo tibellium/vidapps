@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use clap::Args;
 use rsa::{pkcs1::DecodeRsaPrivateKey, pkcs8::DecodePrivateKey, traits::PublicKeyParts};
-use wdv3::proto::Message;
+use drm_widevine::proto::Message;
 
 /**
     Create a .wvd device file from raw credential files.
@@ -20,11 +20,11 @@ pub struct CreateCommand {
 
     /// Device type.
     #[arg(short = 't', long = "type", default_value = "android")]
-    device_type: wdv3::DeviceType,
+    device_type: drm_widevine::DeviceType,
 
     /// Security level.
     #[arg(short, long, default_value = "3")]
-    level: wdv3::SecurityLevel,
+    level: drm_widevine::SecurityLevel,
 
     /// Output file path. If omitted, auto-generates from client info.
     #[arg(short, long)]
@@ -41,12 +41,12 @@ impl CreateCommand {
 
         // Parse the ClientIdentification protobuf
         let cid_data = std::fs::read(&self.client_id).context("failed to read client_id file")?;
-        let client_id = wdv3::proto::ClientIdentification::decode(cid_data.as_slice())
+        let client_id = drm_widevine::proto::ClientIdentification::decode(cid_data.as_slice())
             .context("failed to decode ClientIdentification protobuf")?;
         eprintln!("Loaded ClientIdentification ({} bytes)", cid_data.len());
 
         // Build the device
-        let device = wdv3::Device::new(self.device_type, self.level, private_key, client_id);
+        let device = drm_widevine::Device::new(self.device_type, self.level, private_key, client_id);
 
         // Determine output path
         let output_path = match &self.output {
@@ -106,7 +106,7 @@ fn parse_private_key(data: &[u8]) -> Result<rsa::RsaPrivateKey> {
     Derive a filename from the device's client_id metadata.
     Format: {company}_{model}_{security_level}.wvd
 */
-fn derive_device_filename(device: &wdv3::Device) -> String {
+fn derive_device_filename(device: &drm_widevine::Device) -> String {
     let cid = device.client_id();
     let mut company = String::new();
     let mut model = String::new();

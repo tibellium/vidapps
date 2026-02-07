@@ -48,8 +48,11 @@ fn extract_default_kid_from_mpd(mpd_content: &str) -> Option<String> {
     on the session for privacy mode. Returns Ok if privacy mode was enabled,
     or an error if it couldn't be enabled (caller should fall back to plaintext).
 */
-async fn try_enable_privacy_mode(session: &mut wdv3::Session, license_url: &str) -> Result<()> {
-    let cert_request = wdv3::Session::service_certificate_request();
+async fn try_enable_privacy_mode(
+    session: &mut drm_widevine::Session,
+    license_url: &str,
+) -> Result<()> {
+    let cert_request = drm_widevine::Session::service_certificate_request();
     let cert_response = license_request(license_url, cert_request).await?;
     session
         .set_service_certificate(&cert_response)
@@ -88,11 +91,11 @@ async fn license_request(license_url: &str, body: Vec<u8>) -> Result<Vec<u8>> {
 pub async fn fetch_decryption_keys(pssh_b64: &str, license_url: &str) -> Result<Vec<String>> {
     println!("[cdrm] Performing local license acquisition...");
 
-    let pssh =
-        wdv3::PsshBox::from_base64(pssh_b64).map_err(|e| anyhow!("Failed to parse PSSH: {e}"))?;
+    let pssh = drm_widevine::PsshBox::from_base64(pssh_b64)
+        .map_err(|e| anyhow!("Failed to parse PSSH: {e}"))?;
 
-    let device = wdv3::static_devices::random();
-    let mut session = wdv3::Session::new(device);
+    let device = drm_widevine::static_devices::random();
+    let mut session = drm_widevine::Session::new(device);
 
     // Try to enable privacy mode by fetching the server's service certificate.
     // If the server doesn't support it or the cert fails to parse, fall back
@@ -104,7 +107,7 @@ pub async fn fetch_decryption_keys(pssh_b64: &str, license_url: &str) -> Result<
 
     // Build and send the license challenge
     let challenge = session
-        .build_license_challenge(&pssh, wdv3::LicenseType::Streaming)
+        .build_license_challenge(&pssh, drm_widevine::LicenseType::Streaming)
         .map_err(|e| anyhow!("Failed to build license challenge: {e}"))?;
 
     let response_bytes = license_request(license_url, challenge).await?;
@@ -114,7 +117,7 @@ pub async fn fetch_decryption_keys(pssh_b64: &str, license_url: &str) -> Result<
 
     let content_keys: Vec<String> = keys
         .iter()
-        .filter(|k| k.key_type == wdv3::KeyType::Content)
+        .filter(|k| k.key_type == drm_widevine::KeyType::Content)
         .map(|k| format!("{}:{}", k.kid_hex(), k.key_hex()))
         .collect();
 

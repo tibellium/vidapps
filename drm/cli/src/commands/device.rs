@@ -15,7 +15,7 @@ pub struct DeviceCommand {
 impl DeviceCommand {
     pub fn run(self) -> Result<()> {
         let data = std::fs::read(&self.path).context("failed to read WVD file")?;
-        let device = wdv3::Device::from_bytes(&data).context("failed to parse WVD file")?;
+        let device = drm_widevine::Device::from_bytes(&data).context("failed to parse WVD file")?;
 
         println!("Device Type:     {}", device.device_type);
         println!("Security Level:  {}", device.security_level);

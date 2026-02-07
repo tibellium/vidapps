@@ -30,7 +30,7 @@ pub struct KeysCommand {
         License type: streaming (default), offline, or automatic.
     */
     #[arg(short, long, default_value = "streaming")]
-    license_type: wdv3::LicenseType,
+    license_type: drm_widevine::LicenseType,
 
     /**
         Enable privacy mode with a service certificate.
@@ -51,7 +51,7 @@ impl KeysCommand {
     pub async fn run(self) -> Result<()> {
         // Load device
         let wvd_data = std::fs::read(&self.device).context("failed to read WVD file")?;
-        let device = wdv3::Device::from_bytes(&wvd_data).context("failed to parse WVD file")?;
+        let device = drm_widevine::Device::from_bytes(&wvd_data).context("failed to parse WVD file")?;
 
         eprintln!(
             "Loaded device: {} {}",
@@ -59,7 +59,7 @@ impl KeysCommand {
         );
 
         // Create session
-        let mut session = wdv3::Session::new(device);
+        let mut session = drm_widevine::Session::new(device);
 
         // Privacy mode
         if let Some(ref privacy) = self.privacy {
@@ -88,7 +88,7 @@ impl KeysCommand {
         }
 
         // Parse PSSH and build challenge
-        let pssh = wdv3::PsshBox::from_base64(&self.pssh).context("failed to parse PSSH box")?;
+        let pssh = drm_widevine::PsshBox::from_base64(&self.pssh).context("failed to parse PSSH box")?;
 
         let challenge = session
             .build_license_challenge(&pssh, self.license_type)

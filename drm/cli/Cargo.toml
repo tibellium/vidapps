@@ -1,11 +1,11 @@
 [package]
-name = "wdv3-cli"
+name = "drm-cli"
 version = { workspace = true }
 edition = { workspace = true }
 publish = { workspace = true }
 
 [dependencies]
-wdv3 = { path = "../wdv3" }
+drm-widevine = { path = "../widevine" }
 
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }

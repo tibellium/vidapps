@@ -1,10 +1,9 @@
-use prost::Message;
 use rsa::{
     RsaPrivateKey,
     pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey},
 };
 
-use wdv3_proto::ClientIdentification;
+use drm_widevine_proto::{ClientIdentification, prost::Message};
 
 use crate::error::{CdmError, CdmResult};
 use crate::types::{DeviceType, SecurityLevel};

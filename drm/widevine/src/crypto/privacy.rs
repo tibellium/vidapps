@@ -1,11 +1,10 @@
-use prost::Message;
 use rsa::{RsaPublicKey, pkcs1::DecodeRsaPublicKey, pss};
 use sha1::Sha1;
 use signature::Verifier;
 
-use wdv3_proto::{
+use drm_widevine_proto::{
     DrmCertificate, EncryptedClientIdentification, SignedDrmCertificate, SignedMessage,
-    signed_message::MessageType,
+    prost::Message, signed_message::MessageType,
 };
 
 use crate::error::CdmError;
