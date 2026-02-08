@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use super::step::Step;
 
-/// Embedded channel manifests directory.
-static CHANNELS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/channels");
+/// Embedded source manifests directory.
+static SOURCES_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/sources");
 
 /// A source manifest defining how to discover channels and extract stream info.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -171,7 +171,7 @@ pub struct ContentOutputs {
 pub fn load_all() -> Result<Vec<Manifest>> {
     let mut manifests = Vec::new();
 
-    for file in CHANNELS_DIR.files() {
+    for file in SOURCES_DIR.files() {
         let path = file.path();
         if path
             .extension()

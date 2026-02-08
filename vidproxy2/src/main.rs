@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manifests = engine::load_all()?;
 
     if manifests.is_empty() {
-        eprintln!("No source manifests found in channels/");
+        eprintln!("No source manifests found in sources/");
         return Ok(());
     }
 
