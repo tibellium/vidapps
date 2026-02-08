@@ -108,7 +108,9 @@ pub struct ResolvedBrowserConfig {
 }
 
 impl BrowserConfig {
-    /// Resolve with fallback to source-level defaults.
+    /**
+        Resolve with fallback to source-level defaults.
+    */
     pub fn resolve(&self, source: &Source) -> ResolvedBrowserConfig {
         ResolvedBrowserConfig {
             proxy: self.proxy.clone().or_else(|| source.proxy.clone()),

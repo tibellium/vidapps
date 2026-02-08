@@ -5,8 +5,7 @@ use std::time::Duration;
 use anyhow::{Result, anyhow};
 use tokio::sync::RwLock;
 
-use crate::engine::browser::create_browser_for_phase;
-use crate::engine::manifest::Manifest;
+use crate::engine::{browser::create_browser_for_phase, manifest::Manifest};
 
 use super::content::execute_content;
 use super::discovery::execute_discovery;
@@ -17,7 +16,9 @@ use super::types::{ChannelContentState, ChannelEntry, ChannelId, StreamInfo};
 
 const CONTENT_WAIT_TIMEOUT: Duration = Duration::from_secs(120);
 
-/// Store for loaded manifests, keyed by source ID.
+/**
+    Store for loaded manifests, keyed by source ID.
+*/
 pub struct ManifestStore {
     manifests: RwLock<HashMap<String, Manifest>>,
 }
@@ -49,12 +50,14 @@ impl Default for ManifestStore {
     }
 }
 
-/// Content resolution orchestrator.
-///
-/// Owns the manifest store and registry, and provides the high-level operations:
-/// - `run_initial_discovery()` — startup discovery for a single source
-/// - `refresh_discovery_if_needed()` — re-run discovery when expired
-/// - `ensure_stream_info()` — on-demand content resolution with concurrent coalescing
+/**
+    Content resolution orchestrator.
+
+    Owns the manifest store and registry, and provides the high-level operations:
+    - `run_initial_discovery()` — startup discovery for a single source
+    - `refresh_discovery_if_needed()` — re-run discovery when expired
+    - `ensure_stream_info()` — on-demand content resolution with concurrent coalescing
+*/
 pub struct Resolver {
     pub registry: Arc<ChannelRegistry>,
     pub manifest_store: Arc<ManifestStore>,
@@ -68,10 +71,12 @@ impl Resolver {
         }
     }
 
-    /// Run initial discovery for a source (no content phase — content is on-demand).
-    ///
-    /// Creates a browser, runs discovery + optional metadata, registers channels,
-    /// then closes the browser.
+    /**
+        Run initial discovery for a source (no content phase — content is on-demand).
+
+        Creates a browser, runs discovery + optional metadata, registers channels,
+        then closes the browser.
+    */
     pub async fn run_initial_discovery(&self, manifest: &Manifest) -> Result<()> {
         let source = &manifest.source;
         println!(
@@ -174,7 +179,9 @@ impl Resolver {
         Ok(())
     }
 
-    /// Re-run discovery for a source if its results have expired.
+    /**
+        Re-run discovery for a source if its results have expired.
+    */
     pub async fn refresh_discovery_if_needed(&self, source_id: &str) -> Result<bool> {
         if !self.registry.is_discovery_expired(source_id) {
             return Ok(false);
@@ -195,10 +202,12 @@ impl Resolver {
         Ok(true)
     }
 
-    /// Re-run metadata for a source if its EPG data has expired.
-    ///
-    /// Unlike discovery refresh, this only re-runs the metadata phase and updates
-    /// programmes in-place without touching discovery or content state.
+    /**
+        Re-run metadata for a source if its EPG data has expired.
+
+        Unlike discovery refresh, this only re-runs the metadata phase and updates
+        programmes in-place without touching discovery or content state.
+    */
     pub async fn refresh_metadata_if_needed(&self, source_id: &str) -> Result<bool> {
         if !self.registry.is_metadata_expired(source_id) {
             return Ok(false);
@@ -260,10 +269,12 @@ impl Resolver {
         Ok(true)
     }
 
-    /// Ensure stream info is available for a channel, resolving on-demand if needed.
-    ///
-    /// Handles concurrent coalescing: if another caller is already resolving,
-    /// this waits for that resolution instead of starting a duplicate.
+    /**
+        Ensure stream info is available for a channel, resolving on-demand if needed.
+
+        Handles concurrent coalescing: if another caller is already resolving,
+        this waits for that resolution instead of starting a duplicate.
+    */
     pub async fn ensure_stream_info(&self, id: &ChannelId) -> Result<StreamInfo> {
         // Check if channel is currently live before doing anything
         if let Some(entry) = self.registry.get(id)
@@ -309,7 +320,9 @@ impl Resolver {
         }
     }
 
-    /// Actually resolve content for a channel (creates browser, runs content phase).
+    /**
+        Actually resolve content for a channel (creates browser, runs content phase).
+    */
     async fn resolve_content(&self, id: &ChannelId) -> Result<StreamInfo> {
         let entry = self
             .registry
@@ -355,7 +368,9 @@ impl Resolver {
         Ok(stream_info)
     }
 
-    /// Wait for another caller's resolution to complete.
+    /**
+        Wait for another caller's resolution to complete.
+    */
     async fn wait_for_resolution(&self, id: &ChannelId) -> Result<StreamInfo> {
         println!(
             "[resolver] Waiting for content resolution of {}...",

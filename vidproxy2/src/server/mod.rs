@@ -1,8 +1,3 @@
-pub mod epg;
-pub mod images;
-pub mod m3u;
-pub mod routes;
-
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -11,6 +6,11 @@ use tokio::sync::watch;
 
 use crate::channel::Resolver;
 use crate::media::PipelineStore;
+
+pub mod epg;
+pub mod images;
+pub mod m3u;
+pub mod routes;
 
 pub use images::ImageCache;
 
@@ -21,7 +21,9 @@ pub struct AppState {
     pub image_cache: Arc<ImageCache>,
 }
 
-/// Run the HTTP server.
+/**
+    Run the HTTP server.
+*/
 pub async fn run_server(
     addr: SocketAddr,
     resolver: Arc<Resolver>,

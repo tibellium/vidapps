@@ -1,6 +1,8 @@
 use anyhow::{Result, anyhow};
 
-/// Extract PSSH and default_KID from an MPD manifest.
+/**
+    Extract PSSH and default_KID from an MPD manifest.
+*/
 pub fn extract_drm_info_from_mpd(
     mpd_url: &str,
     mpd_content: &str,
@@ -33,7 +35,9 @@ fn extract_default_kid_from_mpd(mpd_content: &str) -> Option<String> {
         .map(|m| m.as_str().replace('-', "").to_lowercase())
 }
 
-/// Perform local Widevine license acquisition to fetch decryption keys.
+/**
+    Perform local Widevine license acquisition to fetch decryption keys.
+*/
 pub async fn fetch_decryption_keys(pssh_b64: &str, license_url: &str) -> Result<Vec<String>> {
     println!("[drm] Performing local license acquisition...");
 
@@ -71,7 +75,9 @@ pub async fn fetch_decryption_keys(pssh_b64: &str, license_url: &str) -> Result<
     Ok(content_keys)
 }
 
-/// Fetch MPD, extract PSSH, then get all decryption keys.
+/**
+    Fetch MPD, extract PSSH, then get all decryption keys.
+*/
 pub async fn get_decryption_keys(mpd_url: &str, license_url: &str) -> Result<Vec<String>> {
     println!("[drm] Fetching MPD to extract PSSH...");
 

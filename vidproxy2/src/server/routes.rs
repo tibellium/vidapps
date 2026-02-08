@@ -14,7 +14,9 @@ use super::AppState;
 
 const SOURCE_WAIT_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// Wait for a source to finish loading, returning an error status if it fails.
+/**
+    Wait for a source to finish loading, returning an error status if it fails.
+*/
 async fn wait_for_source_ready(state: &AppState, source_id: &str) -> Result<(), StatusCode> {
     match state
         .resolver
@@ -50,7 +52,9 @@ fn get_base_url(headers: &HeaderMap) -> String {
     format!("{scheme}://{host}")
 }
 
-/// Root endpoint — list all sources.
+/**
+    Root endpoint — list all sources.
+*/
 pub async fn index(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     let base_url = get_base_url(&headers);
     let manifests = state.resolver.manifest_store.list().await;
@@ -81,7 +85,9 @@ pub async fn index(State(state): State<AppState>, headers: HeaderMap) -> impl In
     )
 }
 
-/// Source info endpoint.
+/**
+    Source info endpoint.
+*/
 pub async fn source_info(
     State(state): State<AppState>,
     Path(source_id): Path<String>,
@@ -137,7 +143,9 @@ pub async fn source_info(
     ))
 }
 
-/// M3U playlist endpoint.
+/**
+    M3U playlist endpoint.
+*/
 pub async fn source_m3u(
     State(state): State<AppState>,
     Path(source_id): Path<String>,
@@ -163,7 +171,9 @@ pub async fn source_m3u(
     Ok(([(header::CONTENT_TYPE, "audio/x-mpegurl")], playlist))
 }
 
-/// EPG XML endpoint.
+/**
+    EPG XML endpoint.
+*/
 pub async fn source_epg(
     State(state): State<AppState>,
     Path(source_id): Path<String>,
@@ -193,7 +203,9 @@ pub async fn source_epg(
     Ok(([(header::CONTENT_TYPE, "application/xml")], xml))
 }
 
-/// Channel info endpoint.
+/**
+    Channel info endpoint.
+*/
 pub async fn channel_info(
     State(state): State<AppState>,
     Path((source_id, channel_id)): Path<(String, String)>,
@@ -228,7 +240,9 @@ pub async fn channel_info(
     ))
 }
 
-/// Channel image endpoint.
+/**
+    Channel image endpoint.
+*/
 pub async fn channel_image(
     State(state): State<AppState>,
     Path((source_id, channel_id)): Path<(String, String)>,
@@ -271,7 +285,9 @@ pub async fn channel_image(
         .unwrap())
 }
 
-/// Proxied image endpoint (for EPG programme icons).
+/**
+    Proxied image endpoint (for EPG programme icons).
+*/
 pub async fn proxy_image(
     State(state): State<AppState>,
     Path(image_id): Path<String>,
@@ -289,7 +305,9 @@ pub async fn proxy_image(
         .unwrap())
 }
 
-/// HLS playlist endpoint — resolves content on-demand and starts pipeline.
+/**
+    HLS playlist endpoint — resolves content on-demand and starts pipeline.
+*/
 pub async fn stream_playlist(
     State(state): State<AppState>,
     Path((source_id, channel_id)): Path<(String, String)>,
@@ -401,7 +419,9 @@ pub async fn stream_playlist(
     serve_file(&playlist_path, "application/vnd.apple.mpegurl").await
 }
 
-/// HLS segment endpoint.
+/**
+    HLS segment endpoint.
+*/
 pub async fn stream_segment(
     State(state): State<AppState>,
     Path((source_id, channel_id, filename)): Path<(String, String, String)>,

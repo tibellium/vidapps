@@ -3,7 +3,9 @@ use chrome_browser::{ChromeBrowser, ChromeLaunchOptions};
 
 use super::manifest::{BrowserConfig, ResolvedBrowserConfig, Source};
 
-/// Create a browser instance from resolved browser config.
+/**
+    Create a browser instance from resolved browser config.
+*/
 pub async fn create_browser(config: &ResolvedBrowserConfig) -> Result<ChromeBrowser> {
     let mut options = ChromeLaunchOptions::default()
         .headless(config.headless)
@@ -17,7 +19,9 @@ pub async fn create_browser(config: &ResolvedBrowserConfig) -> Result<ChromeBrow
     ChromeBrowser::new(options).await
 }
 
-/// Create a browser from a phase's browser config + source defaults.
+/**
+    Create a browser from a phase's browser config + source defaults.
+*/
 pub async fn create_browser_for_phase(
     browser_config: &BrowserConfig,
     source: &Source,

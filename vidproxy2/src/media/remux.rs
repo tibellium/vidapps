@@ -8,7 +8,9 @@ use tokio::sync::watch;
 
 use super::segments::SegmentManager;
 
-/// Typed remux error for structured error handling.
+/**
+    Typed remux error for structured error handling.
+*/
 #[derive(Debug)]
 pub enum RemuxError {
     /// Authentication / credential error — caller should refresh stream info.
@@ -34,7 +36,9 @@ impl std::fmt::Display for RemuxError {
 
 impl std::error::Error for RemuxError {}
 
-/// Classify an ffmpeg error into a typed RemuxError.
+/**
+    Classify an ffmpeg error into a typed RemuxError.
+*/
 fn classify_error(error: ffmpeg_types::Error) -> RemuxError {
     let msg = error.to_string();
     let lower = msg.to_lowercase();
@@ -60,7 +64,9 @@ fn classify_error(error: ffmpeg_types::Error) -> RemuxError {
     }
 }
 
-/// Run the remux pipeline: read from source HLS/DASH, write to local HLS.
+/**
+    Run the remux pipeline: read from source HLS/DASH, write to local HLS.
+*/
 pub async fn run_remux_pipeline(
     input_url: &str,
     headers: &[(String, String)],

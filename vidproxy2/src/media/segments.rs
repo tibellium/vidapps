@@ -3,8 +3,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-/// Manages HLS segments in a directory.
-/// Handles cleanup of old segments to prevent unbounded disk usage.
+/**
+    Manages HLS segments in a directory.
+    Handles cleanup of old segments to prevent unbounded disk usage.
+*/
 pub struct SegmentManager {
     output_dir: PathBuf,
     max_segments: usize,
@@ -36,7 +38,9 @@ impl SegmentManager {
         }
     }
 
-    /// Scan the output directory for new .ts segments written by FFmpeg.
+    /**
+        Scan the output directory for new .ts segments written by FFmpeg.
+    */
     pub fn scan_for_new_segments(&self) {
         let Ok(entries) = fs::read_dir(&self.output_dir) else {
             return;
@@ -79,7 +83,9 @@ impl SegmentManager {
         self.segments.lock().unwrap().len()
     }
 
-    /// Clear all segments and remove files from disk.
+    /**
+        Clear all segments and remove files from disk.
+    */
     pub fn clear(&self) {
         let mut segments = self.segments.lock().unwrap();
 

@@ -12,16 +12,20 @@ use crate::engine::{
 
 use super::types::Programme;
 
-/// Result of running the metadata phase.
+/**
+    Result of running the metadata phase.
+*/
 pub struct MetadataResult {
     pub programmes_by_channel: HashMap<String, Vec<Programme>>,
     pub expires_at: Option<DateTime<Utc>>,
 }
 
-/// Execute the metadata phase, returning EPG programmes keyed by channel ID.
-///
-/// Domain filtering happens here: items without `channel_id` or `title` are skipped.
-/// Timestamps are parsed into `DateTime<Utc>` at this boundary.
+/**
+    Execute the metadata phase, returning EPG programmes keyed by channel ID.
+
+    Domain filtering happens here: items without `channel_id` or `title` are skipped.
+    Timestamps are parsed into `DateTime<Utc>` at this boundary.
+*/
 pub async fn execute_metadata(
     phase: &MetadataPhase,
     tab: &ChromeBrowserTab,
@@ -123,7 +127,9 @@ pub async fn execute_metadata(
     })
 }
 
-/// Resolve expiration from metadata outputs.
+/**
+    Resolve expiration from metadata outputs.
+*/
 fn resolve_expiration(outputs: &MetadataOutputs) -> Option<DateTime<Utc>> {
     outputs
         .expires_in

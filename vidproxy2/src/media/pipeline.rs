@@ -15,7 +15,9 @@ use super::drm;
 use super::remux::{self, RemuxError};
 use super::segments::SegmentManager;
 
-/// State of a pipeline.
+/**
+    State of a pipeline.
+*/
 #[derive(Debug)]
 enum PipelineState {
     Idle,
@@ -24,7 +26,9 @@ enum PipelineState {
     Stopping,
 }
 
-/// Manages the lifecycle of a single channel's remux pipeline.
+/**
+    Manages the lifecycle of a single channel's remux pipeline.
+*/
 pub struct ChannelPipeline {
     channel_id: ChannelId,
     state: Arc<Mutex<PipelineState>>,
@@ -91,7 +95,9 @@ impl ChannelPipeline {
         self.needs_refresh.load(Ordering::Relaxed)
     }
 
-    /// Ensure the pipeline is running, starting it if needed.
+    /**
+        Ensure the pipeline is running, starting it if needed.
+    */
     pub async fn ensure_running(&self) -> Result<()> {
         {
             let state = self.state.lock().await;
@@ -298,7 +304,9 @@ impl ChannelPipeline {
     }
 }
 
-/// Configuration for pipeline creation.
+/**
+    Configuration for pipeline creation.
+*/
 #[derive(Clone)]
 pub struct PipelineConfig {
     pub segment_count: usize,
@@ -308,7 +316,9 @@ pub struct PipelineConfig {
     pub base_output_dir: PathBuf,
 }
 
-/// Manages multiple channel pipelines.
+/**
+    Manages multiple channel pipelines.
+*/
 pub struct PipelineStore {
     pipelines: RwLock<HashMap<ChannelId, Arc<ChannelPipeline>>>,
     config: PipelineConfig,
@@ -324,7 +334,9 @@ impl PipelineStore {
         }
     }
 
-    /// Get or create a pipeline for a channel.
+    /**
+        Get or create a pipeline for a channel.
+    */
     pub async fn get_or_create(
         &self,
         channel_id: &ChannelId,

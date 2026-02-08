@@ -1,8 +1,10 @@
 use anyhow::{Result, anyhow};
 use chrome_browser::{ChromeBrowser, ChromeLaunchOptions};
 
-use crate::manifest::types::ResolvedBrowserConfig;
-use crate::manifest::{self, ChannelEntry, DiscoveredChannel, Manifest, StreamInfo, Transform};
+use crate::manifest::{
+    self, ChannelEntry, DiscoveredChannel, Manifest, StreamInfo, Transform,
+    types::ResolvedBrowserConfig,
+};
 
 /**
     Create a browser instance from resolved browser config.

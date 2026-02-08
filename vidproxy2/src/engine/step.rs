@@ -2,13 +2,17 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-/// A step in a phase.
-///
-/// Each variant carries only the fields it requires, validated at parse time.
+/**
+    A step in a phase.
+
+    Each variant carries only the fields it requires, validated at parse time.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "kind")]
 pub enum Step {
-    /// Navigate the browser to a URL.
+    /**
+        Navigate the browser to a URL.
+    */
     Navigate {
         name: String,
         url: String,
@@ -16,24 +20,30 @@ pub enum Step {
         wait_for: Option<WaitCondition>,
     },
 
-    /// Wait for a matching network request and extract data from the response.
+    /**
+        Wait for a matching network request and extract data from the response.
+    */
     Sniff {
         name: String,
         request: RequestMatch,
         extract: HashMap<String, Extractor>,
     },
 
-    /// Collect multiple matching network requests and aggregate extracted data.
+    /**
+        Collect multiple matching network requests and aggregate extracted data.
+    */
     SniffMany {
         name: String,
         request: RequestMatch,
         extract: HashMap<String, Extractor>,
     },
 
-    /// Fetch one or more URLs via HTTP (no browser context).
-    ///
-    /// When `urls` is provided, each URL is fetched and array results are
-    /// merged — like `SniffMany` but with explicit URLs.
+    /**
+        Fetch one or more URLs via HTTP (no browser context).
+
+        When `urls` is provided, each URL is fetched and array results are
+        merged — like `SniffMany` but with explicit URLs.
+    */
     Fetch {
         name: String,
         #[serde(default)]
@@ -45,23 +55,31 @@ pub enum Step {
         extract: HashMap<String, Extractor>,
     },
 
-    /// Fetch a URL via the browser context (inherits page cookies/headers).
+    /**
+        Fetch a URL via the browser context (inherits page cookies/headers).
+    */
     FetchInBrowser {
         name: String,
         url: String,
         extract: HashMap<String, Extractor>,
     },
 
-    /// Extract data from the current page's DOM.
+    /**
+        Extract data from the current page's DOM.
+    */
     Document {
         name: String,
         extract: HashMap<String, Extractor>,
     },
 
-    /// Execute custom JavaScript in page context.
+    /**
+        Execute custom JavaScript in page context.
+    */
     Script { name: String, script: String },
 
-    /// Execute browser automation actions (clicks, etc.).
+    /**
+        Execute browser automation actions (clicks, etc.).
+    */
     Automation {
         name: String,
         steps: Vec<AutomationAction>,
@@ -69,7 +87,9 @@ pub enum Step {
 }
 
 impl Step {
-    /// Get the step name, regardless of variant.
+    /**
+        Get the step name, regardless of variant.
+    */
     pub fn name(&self) -> &str {
         match self {
             Step::Navigate { name, .. }
@@ -84,7 +104,9 @@ impl Step {
     }
 }
 
-/// Wait condition after navigation or actions.
+/**
+    Wait condition after navigation or actions.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WaitCondition {
     #[serde(default)]
@@ -95,7 +117,9 @@ pub struct WaitCondition {
     pub delay: Option<f64>,
 }
 
-/// Request matching criteria for Sniff/SniffMany steps.
+/**
+    Request matching criteria for Sniff/SniffMany steps.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RequestMatch {
     pub url: String,
@@ -107,7 +131,9 @@ pub struct RequestMatch {
     pub idle_timeout: Option<f64>,
 }
 
-/// An automation action within an Automation step.
+/**
+    An automation action within an Automation step.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "kind")]
 pub enum AutomationAction {
@@ -123,7 +149,9 @@ pub enum AutomationAction {
     },
 }
 
-/// An extractor that pulls data from a response.
+/**
+    An extractor that pulls data from a response.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Extractor {
     pub kind: ExtractorKind,
@@ -139,7 +167,9 @@ pub struct Extractor {
     pub unescape: bool,
 }
 
-/// The kind of extractor.
+/**
+    The kind of extractor.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ExtractorKind {
@@ -167,7 +197,9 @@ pub enum ExtractorKind {
     Pssh,
 }
 
-/// Check if an extractor kind is an array type.
+/**
+    Check if an extractor kind is an array type.
+*/
 pub fn is_array_extractor(kind: &ExtractorKind) -> bool {
     matches!(
         kind,

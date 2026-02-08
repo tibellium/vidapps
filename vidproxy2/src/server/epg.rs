@@ -5,14 +5,18 @@ use crate::engine::manifest::Source;
 
 use super::images::ImageCache;
 
-/// Format a `DateTime<Utc>` as an XMLTV timestamp (`YYYYMMDDHHmmSS +0000`).
+/**
+    Format a `DateTime<Utc>` as an XMLTV timestamp (`YYYYMMDDHHmmSS +0000`).
+*/
 fn format_xmltv_time(dt: &DateTime<Utc>) -> String {
     dt.format("%Y%m%d%H%M%S %z").to_string()
 }
 
-/// Generate an XMLTV EPG document from a list of channel entries.
-///
-/// Pure function apart from image cache registration for programme icons.
+/**
+    Generate an XMLTV EPG document from a list of channel entries.
+
+    Pure function apart from image cache registration for programme icons.
+*/
 pub async fn generate_epg(
     channels: &[ChannelEntry],
     source: &Source,

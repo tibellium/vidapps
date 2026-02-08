@@ -3,9 +3,11 @@ use crate::engine::manifest::Source;
 
 use super::epg::escape_xml;
 
-/// Generate an M3U playlist from a list of channel entries.
-///
-/// Pure function — no server state needed.
+/**
+    Generate an M3U playlist from a list of channel entries.
+
+    Pure function — no server state needed.
+*/
 pub fn generate_m3u(channels: &[ChannelEntry], source: &Source, base_url: &str) -> String {
     let source_id = &source.id;
 

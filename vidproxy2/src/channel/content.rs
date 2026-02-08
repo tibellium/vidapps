@@ -10,7 +10,9 @@ use crate::engine::{
 
 use super::types::{Channel, StreamInfo};
 
-/// Execute the content phase for a single channel, returning stream info.
+/**
+    Execute the content phase for a single channel, returning stream info.
+*/
 pub async fn execute_content(
     phase: &ContentPhase,
     tab: &ChromeBrowserTab,
@@ -51,7 +53,9 @@ pub async fn execute_content(
     })
 }
 
-/// Resolve expiration from content outputs.
+/**
+    Resolve expiration from content outputs.
+*/
 fn resolve_expiration(
     outputs: &ContentOutputs,
     context: &InterpolationContext,
@@ -68,7 +72,9 @@ fn resolve_expiration(
         .map(|secs| crate::util::time::now() + Duration::seconds(secs as i64))
 }
 
-/// Resolve optional headers from content outputs.
+/**
+    Resolve optional headers from content outputs.
+*/
 fn resolve_headers(
     outputs: &ContentOutputs,
     context: &InterpolationContext,

@@ -2,7 +2,9 @@ use crate::engine::{ChannelFilter, ProcessPhase, Transform};
 
 use super::types::Channel;
 
-/// Apply the full process phase (filter + transforms) to a list of channels.
+/**
+    Apply the full process phase (filter + transforms) to a list of channels.
+*/
 pub fn apply_process_phase(channels: Vec<Channel>, process: &ProcessPhase) -> Vec<Channel> {
     let mut channels = apply_filter(channels, process.filter.as_ref());
 
@@ -13,7 +15,9 @@ pub fn apply_process_phase(channels: Vec<Channel>, process: &ProcessPhase) -> Ve
     channels
 }
 
-/// Filter channels based on name and/or id lists.
+/**
+    Filter channels based on name and/or id lists.
+*/
 fn apply_filter(channels: Vec<Channel>, filter: Option<&ChannelFilter>) -> Vec<Channel> {
     let Some(filter) = filter else {
         return channels;
@@ -42,7 +46,9 @@ fn apply_filter(channels: Vec<Channel>, filter: Option<&ChannelFilter>) -> Vec<C
     filtered
 }
 
-/// Apply a single transform to a list of channels.
+/**
+    Apply a single transform to a list of channels.
+*/
 fn apply_transform(channels: &mut [Channel], transform: &Transform) {
     match transform {
         Transform::AddCategory { name, id, category } => {

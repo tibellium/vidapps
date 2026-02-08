@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 
-/// Full channel ID combining source and channel ID.
+/**
+    Full channel ID combining source and channel ID.
+*/
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ChannelId {
     pub source: String,
@@ -26,7 +28,9 @@ impl ChannelId {
     }
 }
 
-/// A discovered channel.
+/**
+    A discovered channel.
+*/
 #[derive(Debug, Clone)]
 pub struct Channel {
     #[allow(dead_code)]
@@ -38,7 +42,9 @@ pub struct Channel {
     pub description: Option<String>,
 }
 
-/// Stream info from the content phase.
+/**
+    Stream info from the content phase.
+*/
 #[derive(Debug, Clone)]
 pub struct StreamInfo {
     pub manifest_url: String,
@@ -47,7 +53,9 @@ pub struct StreamInfo {
     pub headers: Vec<(String, String)>,
 }
 
-/// A single EPG programme entry.
+/**
+    A single EPG programme entry.
+*/
 #[derive(Debug, Clone)]
 pub struct Programme {
     pub title: String,
@@ -61,7 +69,9 @@ pub struct Programme {
     pub is_live: Option<bool>,
 }
 
-/// Full channel entry combining discovery, metadata, and content info.
+/**
+    Full channel entry combining discovery, metadata, and content info.
+*/
 #[derive(Debug, Clone)]
 pub struct ChannelEntry {
     pub channel: Channel,
@@ -71,11 +81,13 @@ pub struct ChannelEntry {
 }
 
 impl ChannelEntry {
-    /// Check if the channel is currently live based on EPG data.
-    ///
-    /// Finds the currently-airing programme by matching timestamps and checks
-    /// its `is_live` field. Returns `true` (assume live) when there's no
-    /// programme data or no `is_live` field.
+    /**
+        Check if the channel is currently live based on EPG data.
+
+        Finds the currently-airing programme by matching timestamps and checks
+        its `is_live` field. Returns `true` (assume live) when there's no
+        programme data or no `is_live` field.
+    */
     pub fn is_live_now(&self) -> bool {
         if self.programmes.is_empty() {
             return true;
@@ -102,7 +114,9 @@ impl ChannelEntry {
     }
 }
 
-/// State of a source's discovery process.
+/**
+    State of a source's discovery process.
+*/
 #[derive(Debug, Clone)]
 pub enum SourceState {
     Loading,
@@ -116,7 +130,9 @@ impl SourceState {
     }
 }
 
-/// State of a channel's content resolution process.
+/**
+    State of a channel's content resolution process.
+*/
 #[derive(Debug, Clone)]
 pub enum ChannelContentState {
     Pending,

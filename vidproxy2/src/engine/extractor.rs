@@ -9,10 +9,14 @@ use sxd_xpath::nodeset::Node;
 
 use super::step::{Extractor, ExtractorKind};
 
-/// Result of extracting from an array - a list of objects with string fields.
+/**
+    Result of extracting from an array - a list of objects with string fields.
+*/
 pub type ExtractedArray = Vec<HashMap<String, Option<String>>>;
 
-/// Run an extractor on the given content. Returns a single string value.
+/**
+    Run an extractor on the given content. Returns a single string value.
+*/
 pub fn extract(
     extractor: &Extractor,
     content: &str,
@@ -45,8 +49,10 @@ pub fn extract(
     }
 }
 
-/// Run an array extractor on the given content.
-/// Returns raw items without any domain-specific filtering.
+/**
+    Run an array extractor on the given content.
+    Returns raw items without any domain-specific filtering.
+*/
 pub fn extract_array(extractor: &Extractor, content: &str) -> Result<ExtractedArray> {
     match extractor.kind {
         ExtractorKind::JsonPathArray => {

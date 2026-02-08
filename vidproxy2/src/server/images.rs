@@ -7,14 +7,18 @@ use tokio::sync::RwLock;
 
 use crate::channel::ChannelId;
 
-/// A cached image with its data and content type.
+/**
+    A cached image with its data and content type.
+*/
 #[derive(Clone)]
 pub struct CachedImage {
     pub data: Arc<Vec<u8>>,
     pub content_type: String,
 }
 
-/// In-memory cache for channel images and proxied EPG images.
+/**
+    In-memory cache for channel images and proxied EPG images.
+*/
 pub struct ImageCache {
     channel_cache: RwLock<HashMap<ChannelId, CachedImage>>,
     proxy_cache: RwLock<HashMap<String, (String, Option<CachedImage>)>>,
@@ -28,7 +32,9 @@ impl ImageCache {
         }
     }
 
-    /// Get a channel image from cache, or fetch from URL if not cached.
+    /**
+        Get a channel image from cache, or fetch from URL if not cached.
+    */
     pub async fn get_or_fetch(
         &self,
         id: &ChannelId,
@@ -52,7 +58,9 @@ impl ImageCache {
         Ok(image)
     }
 
-    /// Register a URL for proxying and return its hash ID.
+    /**
+        Register a URL for proxying and return its hash ID.
+    */
     pub async fn register_proxy_url(&self, url: &str) -> String {
         let id = hash_url(url);
         let mut cache = self.proxy_cache.write().await;
@@ -60,7 +68,9 @@ impl ImageCache {
         id
     }
 
-    /// Get a proxied image by its hash ID, fetching if not cached.
+    /**
+        Get a proxied image by its hash ID, fetching if not cached.
+    */
     pub async fn get_by_id(&self, id: &str) -> Result<CachedImage> {
         let url = {
             let cache = self.proxy_cache.read().await;

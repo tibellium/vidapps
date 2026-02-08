@@ -14,24 +14,30 @@ use super::step::{
 
 const FETCH_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-/// Output from executing a phase's steps.
+/**
+    Output from executing a phase's steps.
+*/
 pub struct PhaseOutput {
     pub context: InterpolationContext,
     pub arrays: HashMap<String, ExtractedArray>,
 }
 
-/// Result from a single step's extraction.
+/**
+    Result from a single step's extraction.
+*/
 enum StepResult {
     Single(HashMap<String, String>),
     Array { name: String, items: ExtractedArray },
     Empty,
 }
 
-/// Store a step's result into the phase output.
-///
-/// Arrays are keyed by output name only (not step name), so multiple steps
-/// producing the same array name will merge their items — consistent with
-/// how `SniffMany` accumulates items across multiple network responses.
+/**
+    Store a step's result into the phase output.
+
+    Arrays are keyed by output name only (not step name), so multiple steps
+    producing the same array name will merge their items — consistent with
+    how `SniffMany` accumulates items across multiple network responses.
+*/
 fn store_result(output: &mut PhaseOutput, step_name: &str, result: StepResult) {
     match result {
         StepResult::Single(values) => {
@@ -46,7 +52,9 @@ fn store_result(output: &mut PhaseOutput, step_name: &str, result: StepResult) {
     }
 }
 
-/// Execute a list of steps, returning the accumulated phase output.
+/**
+    Execute a list of steps, returning the accumulated phase output.
+*/
 pub async fn execute_steps(
     steps: &[Step],
     tab: &ChromeBrowserTab,
@@ -553,8 +561,10 @@ async fn execute_automation(
 
 // ── Shared helpers ───────────────────────────────────────────────────────────
 
-/// Run extractors on content, handling both array and scalar results.
-/// This is the single function that replaces the 6 duplicated patterns.
+/**
+    Run extractors on content, handling both array and scalar results.
+    This is the single function that replaces the 6 duplicated patterns.
+*/
 fn run_extractors(
     extractors: &HashMap<String, Extractor>,
     body: &str,

@@ -4,10 +4,14 @@ use serde::{Deserialize, Serialize};
 
 use super::step::Step;
 
-/// Embedded source manifests directory.
+/**
+    Embedded source manifests directory.
+*/
 static SOURCES_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/sources");
 
-/// A source manifest defining how to discover channels and extract stream info.
+/**
+    A source manifest defining how to discover channels and extract stream info.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Manifest {
     pub source: Source,
@@ -19,7 +23,9 @@ pub struct Manifest {
     pub content: ContentPhase,
 }
 
-/// Source metadata.
+/**
+    Source metadata.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Source {
     pub id: String,
@@ -34,7 +40,9 @@ pub struct Source {
     pub headless: Option<bool>,
 }
 
-/// Browser configuration for a phase (proxy and headless settings).
+/**
+    Browser configuration for a phase (proxy and headless settings).
+*/
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct BrowserConfig {
     #[serde(default)]
@@ -44,7 +52,9 @@ pub struct BrowserConfig {
 }
 
 impl BrowserConfig {
-    /// Resolve with fallback to source-level defaults.
+    /**
+        Resolve with fallback to source-level defaults.
+    */
     pub fn resolve(&self, source: &Source) -> ResolvedBrowserConfig {
         ResolvedBrowserConfig {
             proxy: self.proxy.clone().or_else(|| source.proxy.clone()),
@@ -53,13 +63,17 @@ impl BrowserConfig {
     }
 }
 
-/// Resolved browser configuration with concrete values.
+/**
+    Resolved browser configuration with concrete values.
+*/
 pub struct ResolvedBrowserConfig {
     pub proxy: Option<String>,
     pub headless: bool,
 }
 
-/// Discovery phase - finds all channels from a source.
+/**
+    Discovery phase - finds all channels from a source.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DiscoveryPhase {
     #[serde(flatten)]
@@ -68,7 +82,9 @@ pub struct DiscoveryPhase {
     pub outputs: DiscoveryOutputs,
 }
 
-/// Outputs from the discovery phase (per-channel).
+/**
+    Outputs from the discovery phase (per-channel).
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DiscoveryOutputs {
     pub id: String,
@@ -82,7 +98,9 @@ pub struct DiscoveryOutputs {
     pub expires_in: Option<u64>,
 }
 
-/// Processing phase - filter and transform discovered channels.
+/**
+    Processing phase - filter and transform discovered channels.
+*/
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ProcessPhase {
     #[serde(default)]
@@ -91,7 +109,9 @@ pub struct ProcessPhase {
     pub transforms: Vec<Transform>,
 }
 
-/// Filter to apply to discovered channels.
+/**
+    Filter to apply to discovered channels.
+*/
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ChannelFilter {
     #[serde(default)]
@@ -100,7 +120,9 @@ pub struct ChannelFilter {
     pub id: Vec<String>,
 }
 
-/// A transform to apply to channels.
+/**
+    A transform to apply to channels.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "kind")]
 pub enum Transform {
@@ -127,7 +149,9 @@ pub enum Transform {
     },
 }
 
-/// Metadata phase - extracts EPG data per channel.
+/**
+    Metadata phase - extracts EPG data per channel.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MetadataPhase {
     #[serde(flatten)]
@@ -136,7 +160,9 @@ pub struct MetadataPhase {
     pub outputs: MetadataOutputs,
 }
 
-/// Outputs from the metadata phase.
+/**
+    Outputs from the metadata phase.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MetadataOutputs {
     pub programmes: String,
@@ -144,7 +170,9 @@ pub struct MetadataOutputs {
     pub expires_in: Option<u64>,
 }
 
-/// Content phase - fetches stream info for a single channel.
+/**
+    Content phase - fetches stream info for a single channel.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ContentPhase {
     #[serde(flatten)]
@@ -153,7 +181,9 @@ pub struct ContentPhase {
     pub outputs: ContentOutputs,
 }
 
-/// Outputs from the content phase.
+/**
+    Outputs from the content phase.
+*/
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ContentOutputs {
     pub manifest_url: String,
@@ -167,7 +197,9 @@ pub struct ContentOutputs {
     pub headers: Option<std::collections::HashMap<String, String>>,
 }
 
-/// Load all available source manifests.
+/**
+    Load all available source manifests.
+*/
 pub fn load_all() -> Result<Vec<Manifest>> {
     let mut manifests = Vec::new();
 
@@ -192,7 +224,9 @@ pub fn load_all() -> Result<Vec<Manifest>> {
     Ok(manifests)
 }
 
-/// Find a source manifest by ID (case-insensitive, partial match).
+/**
+    Find a source manifest by ID (case-insensitive, partial match).
+*/
 pub fn find_by_id(id: &str) -> Result<Manifest> {
     let manifests = load_all()?;
     let id_lower = id.to_lowercase();
@@ -214,7 +248,9 @@ pub fn find_by_id(id: &str) -> Result<Manifest> {
     Err(anyhow!("Source '{}' not found", id))
 }
 
-/// List all available source IDs.
+/**
+    List all available source IDs.
+*/
 pub fn list_sources() -> Result<Vec<String>> {
     let manifests = load_all()?;
     Ok(manifests.into_iter().map(|m| m.source.id).collect())

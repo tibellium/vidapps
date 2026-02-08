@@ -10,19 +10,23 @@ use crate::engine::{
 
 use super::types::Channel;
 
-/// Result of running the discovery phase.
+/**
+    Result of running the discovery phase.
+*/
 pub struct DiscoveryResult {
     pub channels: Vec<Channel>,
     pub expires_at: Option<DateTime<Utc>>,
 }
 
-/// Execute the discovery phase, returning discovered channels.
-///
-/// Supports two modes:
-/// 1. Multi-channel: An array extractor produces multiple items, each becoming a channel.
-/// 2. Single-channel: Scalar extractors produce one channel via output interpolation.
-///
-/// Domain filtering happens here: items without an `id` field are skipped.
+/**
+    Execute the discovery phase, returning discovered channels.
+
+    Supports two modes:
+    1. Multi-channel: An array extractor produces multiple items, each becoming a channel.
+    2. Single-channel: Scalar extractors produce one channel via output interpolation.
+
+    Domain filtering happens here: items without an `id` field are skipped.
+*/
 pub async fn execute_discovery(
     phase: &DiscoveryPhase,
     tab: &ChromeBrowserTab,
@@ -94,12 +98,16 @@ pub async fn execute_discovery(
     })
 }
 
-/// Get the first array from a phase output (there's typically only one).
+/**
+    Get the first array from a phase output (there's typically only one).
+*/
 fn first_array(output: &PhaseOutput) -> Option<(&String, &crate::engine::ExtractedArray)> {
     output.arrays.iter().next()
 }
 
-/// Resolve expiration from discovery outputs.
+/**
+    Resolve expiration from discovery outputs.
+*/
 fn resolve_expiration(outputs: &DiscoveryOutputs, output: &PhaseOutput) -> Option<DateTime<Utc>> {
     if let Some(expires_at_template) = &outputs.expires_at
         && let Ok(expires_str) = output.context.interpolate(expires_at_template)

@@ -7,7 +7,9 @@ use tokio::sync::Notify;
 
 use super::types::{ChannelContentState, ChannelEntry, ChannelId, SourceState, StreamInfo};
 
-/// In-memory registry of all discovered channels.
+/**
+    In-memory registry of all discovered channels.
+*/
 pub struct ChannelRegistry {
     channels: RwLock<HashMap<ChannelId, ChannelEntry>>,
     discovery_expiration: RwLock<HashMap<String, Option<DateTime<Utc>>>>,
@@ -197,7 +199,9 @@ impl ChannelRegistry {
         false
     }
 
-    /// Update programmes for channels in a source (from a metadata refresh).
+    /**
+        Update programmes for channels in a source (from a metadata refresh).
+    */
     pub fn update_programmes(
         &self,
         source: &str,
@@ -215,9 +219,11 @@ impl ChannelRegistry {
 
     // ── Channel content state (atomic check-and-mark) ────────────────────
 
-    /// Try to start resolving content for a channel.
-    /// Returns `true` if this caller won the race and should do the resolution.
-    /// Returns `false` if another caller is already resolving.
+    /**
+        Try to start resolving content for a channel.
+        Returns `true` if this caller won the race and should do the resolution.
+        Returns `false` if another caller is already resolving.
+    */
     pub fn try_mark_resolving(&self, id: &ChannelId) -> bool {
         let mut states = self.channel_content_state.write().unwrap();
         match states.get(id) {
