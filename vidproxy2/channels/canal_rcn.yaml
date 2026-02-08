@@ -1,0 +1,222 @@
+source:
+  id: "canal_rcn"
+  name: "Canal RCN"
+  country: "CO"
+  language: "es"
+  proxy: "socks5://127.0.0.1:1080"
+
+# Discovery phase: navigate to site and extract all available channels
+
+discovery:
+  headless: true
+
+  outputs:
+    id: "${{find_channels.channels.id}}"
+    name: "${{find_channels.channels.name}}"
+    image: "${{find_channels.channels.image}}"
+    expires_in: 86400 # Refresh discovery daily
+
+  steps:
+    - name: "go_home"
+      kind: Navigate
+      url: "https://www.canalrcn.com"
+      wait_for:
+        function: "localStorage.getItem('persist:tbx') && localStorage.getItem('persist:tbx').includes('access_token')"
+        delay: 0.5
+
+    - name: "find_channels"
+      kind: SniffMany
+      request:
+        url: "tbxapis\\.com.*/items/[^/]+\\.json"
+        method: GET
+        idle_timeout: 3.0
+      extract:
+        channels:
+          kind: jsonpath_array
+          path: "$.result[*]"
+          each:
+            id: "$.id"
+            name: "$.content.title"
+            image: "$.content.images[?(@.type=='THUMB')].url"
+
+# Processing phase: only include channels we care about
+
+process:
+  filter:
+    name:
+      - "RCN Señal en Vivo"
+      - "Noticias RCN"
+      - "Deportes RCN"
+      - "Señal Principal"
+      - "Baños"
+      - "Beauty"
+      - "Comedor"
+      - "Habitación Calma"
+      - "Habitación Tormenta"
+      - "Multiview"
+      - "Sala"
+  transforms:
+    # RCN renames
+    - kind: Rename
+      name: "RCN Señal en Vivo"
+      to: "RCN - Señal Principal"
+    - kind: Rename
+      name: "Noticias RCN"
+      to: "RCN - Noticias"
+    - kind: Rename
+      name: "Deportes RCN"
+      to: "RCN - Deportes"
+
+    # LCDLF renames
+    - kind: Rename
+      name: "Señal Principal"
+      to: "LCDLF - Señal Principal"
+    - kind: Rename
+      name: "Baños"
+      to: "LCDLF - Baños"
+    - kind: Rename
+      name: "Beauty"
+      to: "LCDLF - Beauty"
+    - kind: Rename
+      name: "Comedor"
+      to: "LCDLF - Comedor"
+    - kind: Rename
+      name: "Habitación Calma"
+      to: "LCDLF - Habitación Calma"
+    - kind: Rename
+      name: "Habitación Tormenta"
+      to: "LCDLF - Habitación Tormenta"
+    - kind: Rename
+      name: "Multiview"
+      to: "LCDLF - Multiview"
+    - kind: Rename
+      name: "Sala"
+      to: "LCDLF - Sala"
+
+    # RCN categories
+    - kind: AddCategory
+      name: "RCN - Señal Principal"
+      category: "RCN"
+    - kind: AddCategory
+      name: "RCN - Noticias"
+      category: "RCN"
+    - kind: AddCategory
+      name: "RCN - Deportes"
+      category: "RCN"
+
+    # LCDLF categories
+    - kind: AddCategory
+      name: "LCDLF - Señal Principal"
+      category: "LCDLF"
+    - kind: AddCategory
+      name: "LCDLF - Baños"
+      category: "LCDLF"
+    - kind: AddCategory
+      name: "LCDLF - Beauty"
+      category: "LCDLF"
+    - kind: AddCategory
+      name: "LCDLF - Comedor"
+      category: "LCDLF"
+    - kind: AddCategory
+      name: "LCDLF - Habitación Calma"
+      category: "LCDLF"
+    - kind: AddCategory
+      name: "LCDLF - Habitación Tormenta"
+      category: "LCDLF"
+    - kind: AddCategory
+      name: "LCDLF - Multiview"
+      category: "LCDLF"
+    - kind: AddCategory
+      name: "LCDLF - Sala"
+      category: "LCDLF"
+
+    # LCDLF descriptions
+    - kind: AddDescription
+      name: "LCDLF - Señal Principal"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "LCDLF - Baños"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "LCDLF - Beauty"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "LCDLF - Comedor"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "LCDLF - Habitación Calma"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "LCDLF - Habitación Tormenta"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "LCDLF - Multiview"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "LCDLF - Sala"
+      description: "Transmisión en vivo 24/7"
+
+# Metadata phase: extract EPG data for all channels
+
+metadata:
+  headless: false
+
+  outputs:
+    programmes: "${{get_epg.programmes}}"
+    expires_in: 3600 # Refresh EPG hourly
+
+  steps:
+    - name: "go_to_livetv"
+      kind: Navigate
+      url: "https://www.canalrcn.com/co/tv-en-vivo"
+
+    - name: "get_epg"
+      kind: Sniff
+      request:
+        url: "unity\\.tbxapis\\.com.*/items/.*_coco_p0_es\\.json"
+        method: GET
+        timeout: 60.0
+      extract:
+        programmes:
+          kind: jsonpath_array
+          path: "$.result[*].content.epg[*]"
+          each:
+            channel_id: "$parent.id"
+            title: "$.title"
+            description: "$.description"
+            start_time: "$.startTime"
+            end_time: "$.endTime"
+            image: "$.images[?(@.type=='THUMB')].url"
+
+# Content phase: for each channel, navigate to player and extract stream info
+
+content:
+  headless: false
+
+  outputs:
+    manifest_url: "${{get_content.mpd_url}}"
+    license_url: "${{get_content.license_url}}"
+    expires_at: "${{get_content.expires_at}}"
+
+  steps:
+    - name: "go_to_player"
+      kind: Navigate
+      url: "https://www.canalrcn.com/co/player/${{channel.id}}"
+
+    - name: "get_content"
+      kind: Sniff
+      request:
+        url: "unity\\.tbxapis\\.com/v0/contents/.*/url"
+        method: GET
+        timeout: 60.0
+      extract:
+        mpd_url:
+          kind: jsonpath
+          path: "$.entitlements[?(@.contentType=='application/dash+xml')].url"
+        license_url:
+          kind: jsonpath
+          path: "$.entitlements[?(@.drm.widevine)].drm.widevine.licenseAcquisitionUrl"
+        expires_at:
+          kind: jsonpath_regex
+          path: "$.entitlements[?(@.contentType=='application/dash+xml')].url"
+          regex: "expires=(\\d+)"

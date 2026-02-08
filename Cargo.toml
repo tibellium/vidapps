@@ -4,6 +4,7 @@ members = [
     "vidwall",
     "vidplayer",
     "vidproxy",
+    "vidproxy2",
 ]
 
 [workspace.package]

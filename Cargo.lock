@@ -7453,6 +7453,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "vidproxy2"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64",
+ "chrome-browser",
+ "chrono",
+ "clap",
+ "drm-widevine",
+ "ffmpeg-sink",
+ "ffmpeg-source",
+ "ffmpeg-types",
+ "futures",
+ "glob-match",
+ "include_dir",
+ "jsonpath-rust",
+ "regex",
+ "reqwest",
+ "scraper",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sxd-document",
+ "sxd-xpath",
+ "tempfile",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tower-http",
+]
+
+[[package]]
 name = "vidwall"
 version = "0.0.0"
 dependencies = [

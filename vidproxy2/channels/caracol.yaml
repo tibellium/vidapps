@@ -1,0 +1,193 @@
+source:
+  id: "caracol"
+  name: "Caracol TV"
+  country: "CO"
+  language: "es"
+
+# Discovery phase: open the live page and extract all available channels
+
+discovery:
+  headless: true
+
+  outputs:
+    id: "${{find_channels.channels.id}}"
+    name: "${{find_channels.channels.name}}"
+    image: "${{find_channels.channels.image}}"
+    expires_in: 86400 # Refresh discovery daily
+
+  steps:
+    - name: "go_to_livetv"
+      kind: Navigate
+      url: "https://www.caracoltv.com/senal-vivo"
+      wait_for:
+        selector: "template[id^='signal-item-']"
+
+    - name: "find_channels"
+      kind: Document
+      extract:
+        channels:
+          kind: css_array
+          path: "ul.ListLiveStreamModule-list li.ListLiveStreamModule-list-item[data-signal-item]"
+          each:
+            id: "::attr(data-signal-item)"
+            name: "button.ListLiveStreamModule-list-item-button::attr(title)|button.ListLiveStreamModule-list-item-button::text"
+            image: "img.Image::attr(src)"
+          unescape: true
+
+# Processing phase: rename and categorize channels
+
+process:
+  filter:
+    name:
+      - "Señal en vivo"
+      - "Señal en vivo Noticias Caracol"
+      - "Señal en vivo Blu Radio"
+      - "Señal en vivo La Kalle"
+  transforms:
+    - kind: Rename
+      name: "Señal en vivo"
+      to: "Caracol - Señal Principal"
+    - kind: Rename
+      name: "Señal en vivo Noticias Caracol"
+      to: "Caracol - Noticias"
+    - kind: Rename
+      name: "Señal en vivo Blu Radio"
+      to: "Caracol - Blu Radio"
+    - kind: Rename
+      name: "Señal en vivo La Kalle"
+      to: "Caracol - La Kalle"
+
+    - kind: AddCategory
+      name: "Caracol - Señal Principal"
+      category: "Caracol"
+    - kind: AddCategory
+      name: "Caracol - Noticias"
+      category: "Caracol"
+    - kind: AddCategory
+      name: "Caracol - Blu Radio"
+      category: "Caracol"
+    - kind: AddCategory
+      name: "Caracol - La Kalle"
+      category: "Caracol"
+
+    - kind: AddDescription
+      name: "Caracol - Señal Principal"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "Caracol - Noticias"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "Caracol - Blu Radio"
+      description: "Transmisión en vivo 24/7"
+    - kind: AddDescription
+      name: "Caracol - La Kalle"
+      description: "Transmisión en vivo 24/7"
+
+# Metadata phase: extract EPG data for Caracol TV
+
+metadata:
+  headless: true
+
+  outputs:
+    programmes: "${{get_schedule.programmes}}"
+    expires_in: 3600 # Refresh EPG hourly
+
+  steps:
+    - name: "go_to_schedule"
+      kind: Navigate
+      url: "https://www.caracoltv.com/programacion"
+      wait_for:
+        selector: "div.ScheduleDay-Content-item"
+
+    - name: "get_schedule"
+      kind: Document
+      extract:
+        programmes:
+          kind: css_array
+          path: "div.ScheduleDay-Content-item"
+          each:
+            channel_id: "const:signal-item-1"
+            title: "h2.ScheduleDay-info-title a::text"
+            start_time: "::attr(data-starttime)"
+            end_time: "::attr(data-endtime)"
+            image: "img.Image::attr(src)"
+          unescape: true
+
+# Content phase: extract stream info for each channel
+
+content:
+  headless: false
+  proxy: "socks5://127.0.0.1:1080"
+
+  outputs:
+    manifest_url: "${{get_manifest.manifest_url}}"
+    headers:
+      Referer: "${{get_manifest.referer}}"
+      Origin: "${{get_manifest.origin}}"
+      Accept: "${{get_manifest.accept}}"
+      Accept-Language: "${{get_manifest.accept_language}}"
+      User-Agent: "${{get_manifest.user_agent}}"
+      Cookie: "${{get_manifest.cookie}}"
+
+  steps:
+    - name: "go_to_livetv"
+      kind: Navigate
+      url: "https://www.caracoltv.com/senal-vivo"
+      wait_for:
+        selector: "template[id^='signal-item-']"
+
+    - name: "select_channel"
+      kind: Script
+      script: |
+        (() => {
+          const signalItem = "${{channel.id}}";
+          const clickPlay = () => {
+            const livePlayButton =
+              document.querySelector("ps-mediastream[data-video-player] button.MediaStreamVideoPlayer-media-icon") ||
+              document.querySelector("button.MediaStreamVideoPlayer-media-icon");
+            livePlayButton?.click();
+            return !!livePlayButton;
+          };
+
+          // Schedule actions after this step returns so Sniff can start first.
+          setTimeout(() => {
+            if (signalItem) {
+              const channelButton = document.querySelector(
+                `li[data-signal-item="${signalItem}"] button.ListLiveStreamModule-list-item-button`
+              );
+              channelButton?.click();
+            }
+          }, 300);
+
+          setTimeout(clickPlay, 1500);
+          setTimeout(clickPlay, 2800);
+          setTimeout(clickPlay, 4200);
+          return true;
+        })()
+
+    - name: "get_manifest"
+      kind: Sniff
+      request:
+        url: "master\\.m3u8(\\?.*)?"
+        timeout: 120.0
+      extract:
+        manifest_url:
+          kind: url
+        referer:
+          kind: header
+          path: "referer"
+        origin:
+          kind: header
+          path: "origin"
+        accept:
+          kind: header
+          path: "accept"
+        accept_language:
+          kind: header
+          path: "accept-language"
+        user_agent:
+          kind: header
+          path: "user-agent"
+        cookie:
+          kind: header
+          path: "cookie"

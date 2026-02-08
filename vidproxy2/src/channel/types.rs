@@ -1,0 +1,97 @@
+/// Full channel ID combining source and channel ID.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ChannelId {
+    pub source: String,
+    pub id: String,
+}
+
+impl ChannelId {
+    pub fn new(source: impl Into<String>, id: impl Into<String>) -> Self {
+        Self {
+            source: source.into(),
+            id: id.into(),
+        }
+    }
+
+    pub fn _parse(s: &str) -> Option<Self> {
+        let (source, id) = s.split_once(':')?;
+        Some(Self::new(source, id))
+    }
+
+    #[allow(clippy::inherent_to_string)]
+    pub fn to_string(&self) -> String {
+        format!("{}:{}", self.source, self.id)
+    }
+}
+
+/// A discovered channel.
+#[derive(Debug, Clone)]
+pub struct Channel {
+    #[allow(dead_code)]
+    pub source_id: String,
+    pub id: String,
+    pub name: Option<String>,
+    pub image: Option<String>,
+    pub category: Option<String>,
+    pub description: Option<String>,
+}
+
+/// Stream info from the content phase.
+#[derive(Debug, Clone)]
+pub struct StreamInfo {
+    pub manifest_url: String,
+    pub license_url: Option<String>,
+    pub expires_at: Option<u64>,
+    pub headers: Vec<(String, String)>,
+}
+
+/// A single EPG programme entry.
+#[derive(Debug, Clone)]
+pub struct Programme {
+    pub title: String,
+    pub description: Option<String>,
+    pub start_time: String,
+    pub end_time: String,
+    pub episode: Option<String>,
+    pub season: Option<String>,
+    pub genres: Vec<String>,
+    pub image: Option<String>,
+}
+
+/// Full channel entry combining discovery, metadata, and content info.
+#[derive(Debug, Clone)]
+pub struct ChannelEntry {
+    pub channel: Channel,
+    pub stream_info: Option<StreamInfo>,
+    pub programmes: Vec<Programme>,
+    pub last_error: Option<String>,
+}
+
+/// State of a source's discovery process.
+#[derive(Debug, Clone)]
+pub enum SourceState {
+    Loading,
+    Ready,
+    Failed(String),
+}
+
+impl SourceState {
+    pub fn is_loading(&self) -> bool {
+        matches!(self, SourceState::Loading)
+    }
+}
+
+/// State of a channel's content resolution process.
+#[derive(Debug, Clone)]
+pub enum ChannelContentState {
+    Pending,
+    Resolving,
+    Resolved,
+    Failed(String),
+}
+
+impl ChannelContentState {
+    pub fn is_resolving(&self) -> bool {
+        matches!(self, ChannelContentState::Resolving)
+    }
+}
