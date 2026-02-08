@@ -87,6 +87,37 @@ pub enum Transform {
 }
 
 /**
+    Browser configuration for a phase (proxy and headless settings).
+
+    When present on a phase, overrides the source-level defaults.
+*/
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct BrowserConfig {
+    #[serde(default)]
+    pub proxy: Option<String>,
+    #[serde(default)]
+    pub headless: Option<bool>,
+}
+
+/**
+    Resolved browser configuration with concrete values (no Option).
+*/
+pub struct ResolvedBrowserConfig {
+    pub proxy: Option<String>,
+    pub headless: bool,
+}
+
+impl BrowserConfig {
+    /// Resolve with fallback to source-level defaults.
+    pub fn resolve(&self, source: &Source) -> ResolvedBrowserConfig {
+        ResolvedBrowserConfig {
+            proxy: self.proxy.clone().or_else(|| source.proxy.clone()),
+            headless: self.headless.or(source.headless).unwrap_or(true),
+        }
+    }
+}
+
+/**
     Source metadata.
 */
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -104,9 +135,9 @@ pub struct Source {
     /// ISO 639-1 language code (e.g., "es" for Spanish, "en" for English)
     #[serde(default)]
     pub language: Option<String>,
-    /// Run browser in headless mode for this source
+    /// Default headless mode for all phases (overridable per-phase)
     #[serde(default)]
-    pub headless: bool,
+    pub headless: Option<bool>,
 }
 
 /**
@@ -114,6 +145,8 @@ pub struct Source {
 */
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DiscoveryPhase {
+    #[serde(flatten)]
+    pub browser: BrowserConfig,
     pub steps: Vec<Step>,
     pub outputs: DiscoveryOutputs,
 }
@@ -144,6 +177,8 @@ pub struct DiscoveryOutputs {
 */
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MetadataPhase {
+    #[serde(flatten)]
+    pub browser: BrowserConfig,
     pub steps: Vec<Step>,
     pub outputs: MetadataOutputs,
 }
@@ -165,6 +200,8 @@ pub struct MetadataOutputs {
 */
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ContentPhase {
+    #[serde(flatten)]
+    pub browser: BrowserConfig,
     pub steps: Vec<Step>,
     pub outputs: ContentOutputs,
 }

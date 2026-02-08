@@ -3,10 +3,10 @@ source:
   name: "Canal 1"
   country: "CO"
   language: "es"
-  headless: false
-  proxy: "socks5://127.0.0.1:1080"
 
 discovery:
+  headless: true
+
   outputs:
     id: "${{get_live_json.channel_id}}"
     name: "Canal 1 - Señal en Vivo"
@@ -52,6 +52,8 @@ process:
       description: "Transmisión en vivo 24/7"
 
 metadata:
+  headless: true
+
   outputs:
     programmes: "${{get_schedule.programmes}}"
     expires_in: 3600
@@ -94,6 +96,9 @@ metadata:
             image: "$.featured_image.url"
 
 content:
+  headless: false
+  proxy: "socks5://127.0.0.1:1080"
+
   outputs:
     manifest_url: "${{get_manifest.manifest_url}}"
     headers:

@@ -134,57 +134,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // Run discovery tasks sequentially to avoid browser interference
-    // Each source gets its own browser, but running them in parallel can cause issues
+    // Run discovery tasks in parallel - each source creates its own browser on demand
     let discovery_registry = Arc::clone(&registry);
-    let discovery_manifest_store = Arc::clone(&manifest_store);
     tokio::spawn(async move {
+        let mut handles = Vec::new();
+
         for manifest in manifests {
-            println!(
-                "[discovery] Starting source: {} ({})",
-                manifest.source.name, manifest.source.id
-            );
+            let registry = Arc::clone(&discovery_registry);
+            handles.push(tokio::spawn(async move {
+                println!(
+                    "[discovery] Starting source: {} ({})",
+                    manifest.source.name, manifest.source.id
+                );
 
-            // Create browser for this source
-            let browser = match source::create_browser(&manifest).await {
-                Ok(b) => b,
-                Err(e) => {
-                    eprintln!(
-                        "[discovery] Failed to create browser for '{}': {}",
-                        manifest.source.id, e
-                    );
-                    discovery_registry.mark_source_failed(&manifest.source.id, e.to_string());
-                    continue;
+                match source::run_source_discovery_only(&manifest).await {
+                    Ok(result) => {
+                        let channel_count = result.channels.len();
+                        registry.register_source(
+                            &result.source_id,
+                            result.channels,
+                            result.discovery_expires_at,
+                        );
+                        println!(
+                            "[discovery] Source '{}' ready: {} channels (content on-demand)",
+                            manifest.source.id, channel_count
+                        );
+                    }
+                    Err(e) => {
+                        eprintln!("[discovery] Source '{}' failed: {}", manifest.source.id, e);
+                        registry.mark_source_failed(&manifest.source.id, e.to_string());
+                    }
                 }
-            };
+            }));
+        }
 
-            // Run discovery with the browser
-            match source::run_source_discovery_only(&manifest, &browser).await {
-                Ok(result) => {
-                    let channel_count = result.channels.len();
-
-                    // Store browser for later content resolution
-                    discovery_manifest_store
-                        .set_browser(&manifest.source.id, browser)
-                        .await;
-
-                    discovery_registry.register_source(
-                        &result.source_id,
-                        result.channels,
-                        result.discovery_expires_at,
-                    );
-                    println!(
-                        "[discovery] Source '{}' ready: {} channels (content on-demand)",
-                        manifest.source.id, channel_count
-                    );
-                }
-                Err(e) => {
-                    eprintln!("[discovery] Source '{}' failed: {}", manifest.source.id, e);
-                    discovery_registry.mark_source_failed(&manifest.source.id, e.to_string());
-                    // Close browser on failure
-                    let _ = browser.close().await;
-                }
-            }
+        for handle in handles {
+            let _ = handle.await;
         }
     });
 

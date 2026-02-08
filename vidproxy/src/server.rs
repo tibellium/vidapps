@@ -86,18 +86,16 @@ fn get_base_url(headers: &HeaderMap) -> String {
 }
 
 /**
-    Store for loaded manifests and their associated browsers, keyed by source name
+    Store for loaded manifests, keyed by source ID.
 */
 pub struct ManifestStore {
     manifests: RwLock<HashMap<String, Manifest>>,
-    browsers: RwLock<HashMap<String, chrome_browser::ChromeBrowser>>,
 }
 
 impl ManifestStore {
     pub fn new() -> Self {
         Self {
             manifests: RwLock::new(HashMap::new()),
-            browsers: RwLock::new(HashMap::new()),
         }
     }
 
@@ -112,33 +110,6 @@ impl ManifestStore {
 
     pub async fn list(&self) -> Vec<Manifest> {
         self.manifests.read().await.values().cloned().collect()
-    }
-
-    /**
-        Store a browser instance for a source
-    */
-    pub async fn set_browser(&self, source: &str, browser: chrome_browser::ChromeBrowser) {
-        let mut browsers = self.browsers.write().await;
-        browsers.insert(source.to_string(), browser);
-    }
-
-    /**
-        Get the browser instance for a source (cloning is cheap - it's Arc-based)
-    */
-    pub async fn get_browser(&self, source: &str) -> Option<chrome_browser::ChromeBrowser> {
-        self.browsers.read().await.get(source).cloned()
-    }
-
-    /**
-        Get tab 0 from the browser for a source
-    */
-    pub async fn get_browser_tab(&self, source: &str) -> Option<chrome_browser::ChromeBrowserTab> {
-        let browsers = self.browsers.read().await;
-        if let Some(browser) = browsers.get(source) {
-            browser.get_tab(0).await
-        } else {
-            None
-        }
     }
 }
 
@@ -601,27 +572,14 @@ async fn resolve_channel_content(
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
 
-            // Get browser tab for this source
-            let tab = state
-                .manifest_store
-                .get_browser_tab(source_id)
-                .await
-                .ok_or_else(|| {
-                    eprintln!("[server] No browser found for source '{}'", source_id);
-                    state
-                        .registry
-                        .mark_channel_failed(id, "No browser available");
-                    StatusCode::SERVICE_UNAVAILABLE
-                })?;
-
             // Get channel data from registry
             let entry = state.registry.get(id).ok_or_else(|| {
                 state.registry.mark_channel_failed(id, "Channel not found");
                 StatusCode::NOT_FOUND
             })?;
 
-            // Run content phase for this channel using the existing browser
-            match source::resolve_channel_content(&manifest, &entry.channel, &tab).await {
+            // Run content phase for this channel (creates browser on demand)
+            match source::resolve_channel_content(&manifest, &entry.channel).await {
                 Ok(stream_info) => {
                     println!(
                         "[server] Content resolved for {}: {}",
@@ -681,10 +639,8 @@ async fn stream_playlist(
             source_id
         );
 
-        if let Some(manifest) = state.manifest_store.get(&source_id).await
-            && let Some(browser) = state.manifest_store.get_browser(&source_id).await
-        {
-            match source::run_source_discovery_only(&manifest, &browser).await {
+        if let Some(manifest) = state.manifest_store.get(&source_id).await {
+            match source::run_source_discovery_only(&manifest).await {
                 Ok(result) => {
                     state.registry.register_source(
                         &result.source_id,

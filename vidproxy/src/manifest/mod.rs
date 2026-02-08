@@ -7,7 +7,8 @@ mod executor;
 mod extractors;
 mod interpolate;
 mod metadata;
-mod types;
+
+pub mod types;
 
 pub use content::execute_content;
 pub use discovery::execute_discovery;

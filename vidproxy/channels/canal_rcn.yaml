@@ -3,12 +3,13 @@ source:
   name: "Canal RCN"
   country: "CO"
   language: "es"
-  headless: false
   proxy: "socks5://127.0.0.1:1080"
 
 # Discovery phase: navigate to site and extract all available channels
 
 discovery:
+  headless: true
+
   outputs:
     id: "${{find_channels.channels.id}}"
     name: "${{find_channels.channels.name}}"
@@ -158,6 +159,8 @@ process:
 # Metadata phase: extract EPG data for all channels
 
 metadata:
+  headless: false
+
   outputs:
     programmes: "${{get_epg.programmes}}"
     expires_in: 3600 # Refresh EPG hourly
@@ -172,6 +175,7 @@ metadata:
       request:
         url: "unity\\.tbxapis\\.com.*/items/.*_coco_p0_es\\.json"
         method: GET
+        timeout: 60.0
       extract:
         programmes:
           kind: jsonpath_array
@@ -187,6 +191,8 @@ metadata:
 # Content phase: for each channel, navigate to player and extract stream info
 
 content:
+  headless: false
+
   outputs:
     manifest_url: "${{get_content.mpd_url}}"
     license_url: "${{get_content.license_url}}"
@@ -202,6 +208,7 @@ content:
       request:
         url: "unity\\.tbxapis\\.com/v0/contents/.*/url"
         method: GET
+        timeout: 60.0
       extract:
         mpd_url:
           kind: jsonpath

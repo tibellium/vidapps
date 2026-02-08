@@ -991,7 +991,7 @@ dependencies = [
 [[package]]
 name = "chrome-browser"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
+source = "git+https://github.com/tibellium/crates?rev=f052a8d18fa204211d71d84f546b4b66eb5719e0#f052a8d18fa204211d71d84f546b4b66eb5719e0"
 dependencies = [
  "anyhow",
  "base64",
@@ -1012,7 +1012,7 @@ dependencies = [
 [[package]]
 name = "chrome-client"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
+source = "git+https://github.com/tibellium/crates?rev=f052a8d18fa204211d71d84f546b4b66eb5719e0#f052a8d18fa204211d71d84f546b4b66eb5719e0"
 dependencies = [
  "anyhow",
  "chrome-primitives",
@@ -1031,12 +1031,12 @@ dependencies = [
 [[package]]
 name = "chrome-primitives"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
+source = "git+https://github.com/tibellium/crates?rev=f052a8d18fa204211d71d84f546b4b66eb5719e0#f052a8d18fa204211d71d84f546b4b66eb5719e0"
 
 [[package]]
 name = "chrome-protocol"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
+source = "git+https://github.com/tibellium/crates?rev=f052a8d18fa204211d71d84f546b4b66eb5719e0#f052a8d18fa204211d71d84f546b4b66eb5719e0"
 dependencies = [
  "anyhow",
  "base64",
@@ -1851,7 +1851,7 @@ checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 [[package]]
 name = "drm-core"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
+source = "git+https://github.com/tibellium/crates?rev=f052a8d18fa204211d71d84f546b4b66eb5719e0#f052a8d18fa204211d71d84f546b4b66eb5719e0"
 dependencies = [
  "data-encoding",
  "hex",
@@ -1862,7 +1862,7 @@ dependencies = [
 [[package]]
 name = "drm-widevine"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
+source = "git+https://github.com/tibellium/crates?rev=f052a8d18fa204211d71d84f546b4b66eb5719e0#f052a8d18fa204211d71d84f546b4b66eb5719e0"
 dependencies = [
  "aes",
  "cmac",
@@ -1884,7 +1884,7 @@ dependencies = [
 [[package]]
 name = "drm-widevine-proto"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
+source = "git+https://github.com/tibellium/crates?rev=f052a8d18fa204211d71d84f546b4b66eb5719e0#f052a8d18fa204211d71d84f546b4b66eb5719e0"
 dependencies = [
  "drm-core",
  "prost",
@@ -2168,7 +2168,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-decode"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
+source = "git+https://github.com/tibellium/crates?rev=f052a8d18fa204211d71d84f546b4b66eb5719e0#f052a8d18fa204211d71d84f546b4b66eb5719e0"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-source",
@@ -2189,7 +2189,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-sink"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
+source = "git+https://github.com/tibellium/crates?rev=f052a8d18fa204211d71d84f546b4b66eb5719e0#f052a8d18fa204211d71d84f546b4b66eb5719e0"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-types",
@@ -2198,7 +2198,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-source"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
+source = "git+https://github.com/tibellium/crates?rev=f052a8d18fa204211d71d84f546b4b66eb5719e0#f052a8d18fa204211d71d84f546b4b66eb5719e0"
 dependencies = [
  "aes",
  "bytecount",
@@ -2233,7 +2233,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-transform"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
+source = "git+https://github.com/tibellium/crates?rev=f052a8d18fa204211d71d84f546b4b66eb5719e0#f052a8d18fa204211d71d84f546b4b66eb5719e0"
 dependencies = [
  "ffmpeg-next",
  "ffmpeg-types",
@@ -2242,7 +2242,7 @@ dependencies = [
 [[package]]
 name = "ffmpeg-types"
 version = "0.0.0"
-source = "git+https://github.com/tibellium/crates?rev=e737ca1a5f505be763a38f46e26449c20989260d#e737ca1a5f505be763a38f46e26449c20989260d"
+source = "git+https://github.com/tibellium/crates?rev=f052a8d18fa204211d71d84f546b4b66eb5719e0#f052a8d18fa204211d71d84f546b4b66eb5719e0"
 dependencies = [
  "static_assertions",
 ]

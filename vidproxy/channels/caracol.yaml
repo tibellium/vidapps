@@ -3,11 +3,12 @@ source:
   name: "Caracol TV"
   country: "CO"
   language: "es"
-  headless: false
 
 # Discovery phase: open the live page and extract all available channels
 
 discovery:
+  headless: true
+
   outputs:
     id: "${{find_channels.channels.id}}"
     name: "${{find_channels.channels.name}}"
@@ -85,6 +86,8 @@ process:
 # Metadata phase: extract EPG data for Caracol TV
 
 metadata:
+  headless: true
+
   outputs:
     programmes: "${{get_schedule.programmes}}"
     expires_in: 3600 # Refresh EPG hourly
@@ -113,6 +116,9 @@ metadata:
 # Content phase: extract stream info for each channel
 
 content:
+  headless: false
+  proxy: "socks5://127.0.0.1:1080"
+
   outputs:
     manifest_url: "${{get_manifest.manifest_url}}"
     headers:

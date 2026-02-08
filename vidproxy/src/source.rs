@@ -1,19 +1,19 @@
 use anyhow::{Result, anyhow};
-use chrome_browser::{ChromeBrowser, ChromeBrowserTab, ChromeLaunchOptions};
+use chrome_browser::{ChromeBrowser, ChromeLaunchOptions};
 
+use crate::manifest::types::ResolvedBrowserConfig;
 use crate::manifest::{self, ChannelEntry, DiscoveredChannel, Manifest, StreamInfo, Transform};
 
 /**
-    Create a browser instance configured for a manifest's source.
+    Create a browser instance from resolved browser config.
 */
-pub async fn create_browser(manifest: &Manifest) -> Result<ChromeBrowser> {
-    let headless = manifest.source.headless;
+async fn create_browser(config: &ResolvedBrowserConfig) -> Result<ChromeBrowser> {
     let mut options = ChromeLaunchOptions::default()
-        .headless(headless)
+        .headless(config.headless)
         .devtools(false)
-        .enable_gpu(headless); // Enable GPU acceleration in headless mode
+        .enable_gpu(config.headless); // Enable GPU acceleration in headless mode
 
-    if let Some(ref proxy) = manifest.source.proxy {
+    if let Some(ref proxy) = config.proxy {
         options = options.proxy_server(proxy);
     }
 
@@ -50,12 +50,13 @@ pub async fn run_source(manifest: &Manifest, headless: bool) -> Result<SourceRes
     let source_name = &manifest.source.name;
     println!("[source] Starting source: {} ({})", source_name, source_id);
 
-    // Launch browser
+    // Launch browser using discovery config (full run uses discovery browser for all phases)
+    let browser_config = manifest.discovery.browser.resolve(&manifest.source);
     let mut options = ChromeLaunchOptions::default()
         .headless(headless)
         .devtools(false);
 
-    if let Some(ref proxy) = manifest.source.proxy {
+    if let Some(ref proxy) = browser_config.proxy {
         options = options.proxy_server(proxy);
     }
 
@@ -69,7 +70,7 @@ pub async fn run_source(manifest: &Manifest, headless: bool) -> Result<SourceRes
 
     // Run discovery phase
     println!("[source] Running discovery phase...");
-    let proxy = manifest.source.proxy.as_deref();
+    let proxy = browser_config.proxy.as_deref();
     let discovery_result =
         manifest::execute_discovery(&manifest.discovery, &tab, source_id, proxy).await?;
 
@@ -208,12 +209,9 @@ pub async fn run_source(manifest: &Manifest, headless: bool) -> Result<SourceRes
     This is used for fast startup - channels are registered with stream_info: None,
     and content is resolved on-demand when a channel is first requested.
 
-    The browser is passed in and kept alive for later content resolution.
+    Creates its own browser on demand and closes it when done.
 */
-pub async fn run_source_discovery_only(
-    manifest: &Manifest,
-    browser: &ChromeBrowser,
-) -> Result<SourceResult> {
+pub async fn run_source_discovery_only(manifest: &Manifest) -> Result<SourceResult> {
     let source_id = &manifest.source.id;
     let source_name = &manifest.source.name;
     println!(
@@ -221,7 +219,10 @@ pub async fn run_source_discovery_only(
         source_name, source_id
     );
 
-    // Get tab 0 for all operations
+    // Create browser on demand for the discovery phase
+    let discovery_config = manifest.discovery.browser.resolve(&manifest.source);
+    let browser = create_browser(&discovery_config).await?;
+
     let tab = browser
         .get_tab(0)
         .await
@@ -229,12 +230,16 @@ pub async fn run_source_discovery_only(
 
     // Run discovery phase
     println!("[source] Running discovery phase...");
-    let proxy = manifest.source.proxy.as_deref();
+    let proxy = discovery_config.proxy.as_deref();
     let discovery_result =
         manifest::execute_discovery(&manifest.discovery, &tab, source_id, proxy).await?;
 
     let channels = discovery_result.channels;
     println!("[source] Discovery found {} channels", channels.len());
+
+    // Navigate to blank and close discovery browser
+    let _ = tab.navigate("about:blank").await;
+    let _ = browser.close().await;
 
     // Apply processing phase if present (filter + transforms)
     let channels: Vec<DiscoveredChannel> = if let Some(ref process) = manifest.process {
@@ -272,14 +277,22 @@ pub async fn run_source_discovery_only(
         channels
     };
 
-    // Run metadata phase once if present (extracts EPG for all channels from single request)
+    // Run metadata phase if present (creates its own browser with metadata config)
     let mut channel_programmes: std::collections::HashMap<String, Vec<crate::manifest::Programme>> =
         std::collections::HashMap::new();
 
     if let Some(ref metadata_phase) = manifest.metadata {
         println!("[source] Running metadata phase...");
 
-        match manifest::execute_metadata(metadata_phase, &tab, proxy).await {
+        let metadata_config = metadata_phase.browser.resolve(&manifest.source);
+        let metadata_browser = create_browser(&metadata_config).await?;
+        let metadata_tab = metadata_browser
+            .get_tab(0)
+            .await
+            .ok_or_else(|| anyhow!("No browser tab available for metadata"))?;
+
+        let metadata_proxy = metadata_config.proxy.as_deref();
+        match manifest::execute_metadata(metadata_phase, &metadata_tab, metadata_proxy).await {
             Ok(result) => {
                 channel_programmes = result.programmes_by_channel;
             }
@@ -287,10 +300,10 @@ pub async fn run_source_discovery_only(
                 eprintln!("[source] Metadata phase failed: {}", e);
             }
         }
-    }
 
-    // Navigate to blank page to stop any streaming and save bandwidth
-    let _ = tab.navigate("about:blank").await;
+        let _ = metadata_tab.navigate("about:blank").await;
+        let _ = metadata_browser.close().await;
+    }
 
     // Create channel entries with stream_info: None (content resolved on-demand)
     let channel_entries: Vec<ChannelEntry> = channels
@@ -320,30 +333,36 @@ pub async fn run_source_discovery_only(
 }
 
 /**
-    Resolve content phase for a channel using an existing browser tab.
+    Resolve content phase for a channel.
 
-    This is used for on-demand content resolution after discovery has already run.
-    Auth is already established from discovery, so we just run the content phase.
+    Creates its own browser on demand and closes it when done.
 */
 pub async fn resolve_channel_content(
     manifest: &Manifest,
     channel: &DiscoveredChannel,
-    tab: &ChromeBrowserTab,
 ) -> Result<StreamInfo> {
     let channel_name = channel.name.as_deref().unwrap_or(&channel.id);
     println!("[source] Resolving content for '{}'...", channel_name);
 
-    // Run content phase using the channel data we already have
-    let proxy = manifest.source.proxy.as_deref();
-    let stream_info = manifest::execute_content(&manifest.content, tab, channel, proxy).await?;
+    // Create browser on demand for the content phase
+    let content_config = manifest.content.browser.resolve(&manifest.source);
+    let browser = create_browser(&content_config).await?;
+    let tab = browser
+        .get_tab(0)
+        .await
+        .ok_or_else(|| anyhow!("No browser tab available for content"))?;
+
+    let proxy = content_config.proxy.as_deref();
+    let stream_info = manifest::execute_content(&manifest.content, &tab, channel, proxy).await?;
 
     println!(
         "[source] Content resolved for '{}': {}",
         channel_name, stream_info.manifest_url
     );
 
-    // Navigate to blank page to stop any streaming and save bandwidth
+    // Navigate to blank and close browser
     let _ = tab.navigate("about:blank").await;
+    let _ = browser.close().await;
 
     Ok(stream_info)
 }
