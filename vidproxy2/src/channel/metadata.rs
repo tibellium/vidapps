@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{Result, anyhow};
 use chrome_browser::ChromeBrowserTab;
+use chrono::{DateTime, Duration, Utc};
 
 use crate::engine::{
     InterpolationContext,
@@ -14,12 +15,13 @@ use super::types::Programme;
 /// Result of running the metadata phase.
 pub struct MetadataResult {
     pub programmes_by_channel: HashMap<String, Vec<Programme>>,
-    pub expires_at: Option<u64>,
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 /// Execute the metadata phase, returning EPG programmes keyed by channel ID.
 ///
 /// Domain filtering happens here: items without `channel_id` or `title` are skipped.
+/// Timestamps are parsed into `DateTime<Utc>` at this boundary.
 pub async fn execute_metadata(
     phase: &MetadataPhase,
     tab: &ChromeBrowserTab,
@@ -45,13 +47,35 @@ pub async fn execute_metadata(
             Some(t) => t,
             None => continue,
         };
-        let start_time = match item.get("start_time").and_then(|v| v.clone()) {
+        let start_time = match item
+            .get("start_time")
+            .and_then(|v| v.as_ref())
+            .and_then(|s| crate::util::time::parse_timestamp(s))
+        {
             Some(t) => t,
-            None => continue,
+            None => {
+                let raw = item.get("start_time").and_then(|v| v.clone());
+                eprintln!(
+                    "[metadata] Skipping programme '{}': invalid start_time {:?}",
+                    title, raw
+                );
+                continue;
+            }
         };
-        let end_time = match item.get("end_time").and_then(|v| v.clone()) {
+        let end_time = match item
+            .get("end_time")
+            .and_then(|v| v.as_ref())
+            .and_then(|s| crate::util::time::parse_timestamp(s))
+        {
             Some(t) => t,
-            None => continue,
+            None => {
+                let raw = item.get("end_time").and_then(|v| v.clone());
+                eprintln!(
+                    "[metadata] Skipping programme '{}': invalid end_time {:?}",
+                    title, raw
+                );
+                continue;
+            }
         };
 
         let description = item.get("description").and_then(|v| v.clone());
@@ -63,6 +87,10 @@ pub async fn execute_metadata(
             .and_then(|v| v.clone())
             .map(|g| g.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default();
+        let is_live = item
+            .get("is_live")
+            .and_then(|v| v.as_ref())
+            .map(|v| v == "true");
 
         programmes_by_channel
             .entry(channel_id)
@@ -76,6 +104,7 @@ pub async fn execute_metadata(
                 season,
                 genres,
                 image,
+                is_live,
             });
     }
 
@@ -86,7 +115,7 @@ pub async fn execute_metadata(
         programmes_by_channel.len()
     );
 
-    let expires_at = resolve_expiration(&phase.outputs)?;
+    let expires_at = resolve_expiration(&phase.outputs);
 
     Ok(MetadataResult {
         programmes_by_channel,
@@ -95,9 +124,8 @@ pub async fn execute_metadata(
 }
 
 /// Resolve expiration from metadata outputs.
-fn resolve_expiration(outputs: &MetadataOutputs) -> Result<Option<u64>> {
-    if let Some(expires_in) = outputs.expires_in {
-        return Ok(Some(crate::util::time::now() + expires_in));
-    }
-    Ok(None)
+fn resolve_expiration(outputs: &MetadataOutputs) -> Option<DateTime<Utc>> {
+    outputs
+        .expires_in
+        .map(|secs| crate::util::time::now() + Duration::seconds(secs as i64))
 }

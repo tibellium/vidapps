@@ -1,5 +1,6 @@
 use anyhow::{Result, anyhow};
 use chrome_browser::ChromeBrowserTab;
+use chrono::{DateTime, Duration, Utc};
 
 use crate::engine::{
     InterpolationContext, PhaseOutput, Source,
@@ -12,7 +13,7 @@ use super::types::Channel;
 /// Result of running the discovery phase.
 pub struct DiscoveryResult {
     pub channels: Vec<Channel>,
-    pub expires_at: Option<u64>,
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 /// Execute the discovery phase, returning discovered channels.
@@ -85,7 +86,7 @@ pub async fn execute_discovery(
         source.id
     );
 
-    let expires_at = resolve_expiration(&phase.outputs, &output)?;
+    let expires_at = resolve_expiration(&phase.outputs, &output);
 
     Ok(DiscoveryResult {
         channels,
@@ -99,17 +100,15 @@ fn first_array(output: &PhaseOutput) -> Option<(&String, &crate::engine::Extract
 }
 
 /// Resolve expiration from discovery outputs.
-fn resolve_expiration(outputs: &DiscoveryOutputs, output: &PhaseOutput) -> Result<Option<u64>> {
+fn resolve_expiration(outputs: &DiscoveryOutputs, output: &PhaseOutput) -> Option<DateTime<Utc>> {
     if let Some(expires_at_template) = &outputs.expires_at
         && let Ok(expires_str) = output.context.interpolate(expires_at_template)
-        && let Ok(expires) = expires_str.parse::<u64>()
+        && let Some(dt) = crate::util::time::parse_timestamp(&expires_str)
     {
-        return Ok(Some(expires));
+        return Some(dt);
     }
 
-    if let Some(expires_in) = outputs.expires_in {
-        return Ok(Some(crate::util::time::now() + expires_in));
-    }
-
-    Ok(None)
+    outputs
+        .expires_in
+        .map(|secs| crate::util::time::now() + Duration::seconds(secs as i64))
 }

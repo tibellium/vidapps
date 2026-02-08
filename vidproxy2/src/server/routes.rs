@@ -208,6 +208,8 @@ pub async fn channel_info(
         .ok_or(StatusCode::NOT_FOUND)?;
     let stream_info = entry.stream_info.as_ref();
 
+    let available = entry.is_live_now();
+
     Ok((
         [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
         serde_json::json!({
@@ -216,9 +218,10 @@ pub async fn channel_info(
             "channel_id": channel_id,
             "name": entry.channel.name,
             "image": entry.channel.image,
+            "available": available,
             "manifest_url": stream_info.map(|s| &s.manifest_url),
             "license_url": stream_info.and_then(|s| s.license_url.as_ref()),
-            "expires_at": stream_info.and_then(|s| s.expires_at),
+            "expires_at": stream_info.and_then(|s| s.expires_at).map(|dt| dt.timestamp()),
             "error": entry.last_error,
         })
         .to_string(),
@@ -299,11 +302,27 @@ pub async fn stream_playlist(
     let _ = state.resolver.refresh_discovery_if_needed(&source_id).await;
 
     // Check channel exists
-    let _entry = state
+    let entry = state
         .resolver
         .registry
         .get(&id)
         .ok_or(StatusCode::NOT_FOUND)?;
+
+    // Check if channel is currently live before doing any work
+    if !entry.is_live_now() {
+        let name = entry.channel.name.as_deref().unwrap_or(&entry.channel.id);
+        eprintln!(
+            "[server] Channel '{}' is not currently live, refusing playlist",
+            name
+        );
+        // Stop any existing pipeline that may be running from when it was live
+        if let Some(pipeline) = state.pipeline_store.get(&id).await {
+            pipeline.stop().await;
+        }
+        // Invalidate cached content so it re-resolves when the channel goes live again
+        state.resolver.registry.reset_channel_content_state(&id);
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
 
     // Check if pipeline needs refresh due to auth error
     let pipeline_needs_refresh = if let Some(pipeline) = state.pipeline_store.get(&id).await {
@@ -322,14 +341,21 @@ pub async fn stream_playlist(
     }
 
     // Resolve stream info (on-demand with concurrent coalescing)
-    let stream_info = state.resolver.ensure_stream_info(&id).await.map_err(|e| {
-        eprintln!(
-            "[server] Content resolution failed for {}: {}",
-            id.to_string(),
-            e
-        );
-        StatusCode::SERVICE_UNAVAILABLE
-    })?;
+    let stream_info = match state.resolver.ensure_stream_info(&id).await {
+        Ok(info) => info,
+        Err(e) => {
+            eprintln!(
+                "[server] Content resolution failed for {}: {}",
+                id.to_string(),
+                e
+            );
+            // Stop any existing pipeline so it doesn't keep remuxing stale/template content
+            if let Some(pipeline) = state.pipeline_store.get(&id).await {
+                pipeline.stop().await;
+            }
+            return Err(StatusCode::SERVICE_UNAVAILABLE);
+        }
+    };
 
     // Update pipeline stream info if it was refreshed
     if pipeline_needs_refresh && let Some(pipeline) = state.pipeline_store.get(&id).await {
@@ -381,6 +407,13 @@ pub async fn stream_segment(
     Path((source_id, channel_id, filename)): Path<(String, String, String)>,
 ) -> Result<Response, StatusCode> {
     let id = ChannelId::new(&source_id, &channel_id);
+
+    // Check if channel is still live before serving segments
+    if let Some(entry) = state.resolver.registry.get(&id)
+        && !entry.is_live_now()
+    {
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
 
     let pipeline = state
         .pipeline_store

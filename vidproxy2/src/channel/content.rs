@@ -1,5 +1,6 @@
 use anyhow::Result;
 use chrome_browser::ChromeBrowserTab;
+use chrono::{DateTime, Duration, Utc};
 
 use crate::engine::{
     InterpolationContext,
@@ -34,7 +35,7 @@ pub async fn execute_content(
         .as_ref()
         .map(|t| output.context.interpolate(t))
         .transpose()?;
-    let expires_at = resolve_expiration(&phase.outputs, &output.context)?;
+    let expires_at = resolve_expiration(&phase.outputs, &output.context);
     let headers = resolve_headers(&phase.outputs, &output.context)?;
 
     println!(
@@ -54,19 +55,17 @@ pub async fn execute_content(
 fn resolve_expiration(
     outputs: &ContentOutputs,
     context: &InterpolationContext,
-) -> Result<Option<u64>> {
+) -> Option<DateTime<Utc>> {
     if let Some(expires_at_template) = &outputs.expires_at
         && let Ok(expires_str) = context.interpolate(expires_at_template)
-        && let Ok(expires) = expires_str.parse::<u64>()
+        && let Some(dt) = crate::util::time::parse_timestamp(&expires_str)
     {
-        return Ok(Some(expires));
+        return Some(dt);
     }
 
-    if let Some(expires_in) = outputs.expires_in {
-        return Ok(Some(crate::util::time::now() + expires_in));
-    }
-
-    Ok(None)
+    outputs
+        .expires_in
+        .map(|secs| crate::util::time::now() + Duration::seconds(secs as i64))
 }
 
 /// Resolve optional headers from content outputs.

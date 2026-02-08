@@ -94,6 +94,7 @@ metadata:
             start_time: "$.dateTime"
             end_time: "$.dateFinishTime"
             image: "$.featured_image.url"
+            is_live: "$.isLiveWeb"
 
 content:
   headless: false

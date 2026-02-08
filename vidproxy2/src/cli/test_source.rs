@@ -45,7 +45,10 @@ impl TestSourceCommand {
 
         println!("  Discovered {} channel(s)", channels.len());
         if let Some(expires_at) = discovery_result.expires_at {
-            println!("  Expires at: {}", expires_at);
+            println!(
+                "  Expires at: {}",
+                expires_at.format("%Y-%m-%d %H:%M:%S UTC")
+            );
         }
 
         // --- Process phase ---
@@ -98,7 +101,10 @@ impl TestSourceCommand {
                         result.programmes_by_channel.len()
                     );
                     if let Some(expires_at) = result.expires_at {
-                        println!("  Expires at: {}", expires_at);
+                        println!(
+                            "  Expires at: {}",
+                            expires_at.format("%Y-%m-%d %H:%M:%S UTC")
+                        );
                     }
 
                     // Show a sample of programmes per channel
@@ -108,14 +114,22 @@ impl TestSourceCommand {
                             channel_id,
                             programmes.len()
                         );
-                        for prog in programmes.iter().take(2) {
+                        for prog in programmes.iter().take(3) {
+                            let live_tag = match prog.is_live {
+                                Some(true) => " [LIVE]",
+                                Some(false) => " [OFFLINE]",
+                                None => "",
+                            };
                             println!(
-                                "    - {} ({} -> {})",
-                                prog.title, prog.start_time, prog.end_time
+                                "    - {} ({} -> {}){}",
+                                prog.title,
+                                prog.start_time.format("%H:%M"),
+                                prog.end_time.format("%H:%M"),
+                                live_tag
                             );
                         }
-                        if programmes.len() > 2 {
-                            println!("    ... and {} more", programmes.len() - 2);
+                        if programmes.len() > 3 {
+                            println!("    ... and {} more", programmes.len() - 3);
                         }
                     }
                 }
@@ -158,7 +172,10 @@ impl TestSourceCommand {
                             println!("       license:  {}", license);
                         }
                         if let Some(expires_at) = info.expires_at {
-                            println!("       expires:  {}", expires_at);
+                            println!(
+                                "       expires:  {}",
+                                expires_at.format("%Y-%m-%d %H:%M:%S UTC")
+                            );
                         }
                         if !info.headers.is_empty() {
                             for (k, v) in &info.headers {

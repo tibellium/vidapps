@@ -265,6 +265,17 @@ impl Resolver {
     /// Handles concurrent coalescing: if another caller is already resolving,
     /// this waits for that resolution instead of starting a duplicate.
     pub async fn ensure_stream_info(&self, id: &ChannelId) -> Result<StreamInfo> {
+        // Check if channel is currently live before doing anything
+        if let Some(entry) = self.registry.get(id)
+            && !entry.is_live_now()
+        {
+            let name = entry.channel.name.as_deref().unwrap_or(&entry.channel.id);
+            return Err(anyhow!(
+                "Channel '{}' is not currently available (copyrighted content airing)",
+                name
+            ));
+        }
+
         // Check if we already have valid (non-expired) stream info
         if let Some(entry) = self.registry.get(id)
             && let Some(ref info) = entry.stream_info
@@ -304,6 +315,15 @@ impl Resolver {
             .registry
             .get(id)
             .ok_or_else(|| anyhow!("Channel {} not found", id.to_string()))?;
+
+        // Check if channel is currently available
+        if !entry.is_live_now() {
+            let channel_name = entry.channel.name.as_deref().unwrap_or(&entry.channel.id);
+            return Err(anyhow!(
+                "Channel '{}' is not currently available",
+                channel_name
+            ));
+        }
 
         let manifest = self
             .manifest_store

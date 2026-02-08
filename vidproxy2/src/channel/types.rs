@@ -1,3 +1,5 @@
+use chrono::{DateTime, Utc};
+
 /// Full channel ID combining source and channel ID.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ChannelId {
@@ -41,7 +43,7 @@ pub struct Channel {
 pub struct StreamInfo {
     pub manifest_url: String,
     pub license_url: Option<String>,
-    pub expires_at: Option<u64>,
+    pub expires_at: Option<DateTime<Utc>>,
     pub headers: Vec<(String, String)>,
 }
 
@@ -50,12 +52,13 @@ pub struct StreamInfo {
 pub struct Programme {
     pub title: String,
     pub description: Option<String>,
-    pub start_time: String,
-    pub end_time: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
     pub episode: Option<String>,
     pub season: Option<String>,
     pub genres: Vec<String>,
     pub image: Option<String>,
+    pub is_live: Option<bool>,
 }
 
 /// Full channel entry combining discovery, metadata, and content info.
@@ -65,6 +68,31 @@ pub struct ChannelEntry {
     pub stream_info: Option<StreamInfo>,
     pub programmes: Vec<Programme>,
     pub last_error: Option<String>,
+}
+
+impl ChannelEntry {
+    /// Check if the channel is currently live based on EPG data.
+    ///
+    /// Finds the currently-airing programme by matching timestamps and checks
+    /// its `is_live` field. Returns `true` (assume live) when there's no
+    /// programme data or no `is_live` field.
+    pub fn is_live_now(&self) -> bool {
+        if self.programmes.is_empty() {
+            return true;
+        }
+
+        let now = crate::util::time::now();
+
+        let current = self
+            .programmes
+            .iter()
+            .find(|p| p.start_time <= now && now < p.end_time);
+
+        match current {
+            Some(prog) => prog.is_live.unwrap_or(true),
+            None => true,
+        }
+    }
 }
 
 /// State of a source's discovery process.

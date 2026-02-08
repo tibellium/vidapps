@@ -1,9 +1,14 @@
-use chrono::{Duration, TimeZone, Utc};
+use chrono::{DateTime, Duration, Utc};
 
 use crate::channel::ChannelEntry;
 use crate::engine::manifest::Source;
 
 use super::images::ImageCache;
+
+/// Format a `DateTime<Utc>` as an XMLTV timestamp (`YYYYMMDDHHmmSS +0000`).
+fn format_xmltv_time(dt: &DateTime<Utc>) -> String {
+    dt.format("%Y%m%d%H%M%S %z").to_string()
+}
 
 /// Generate an XMLTV EPG document from a list of channel entries.
 ///
@@ -77,8 +82,8 @@ pub async fn generate_epg(
                      \x20   <desc{lang}>{desc}</desc>\n\
                      {category}\
                      \x20 </programme>\n",
-                    start = day_start.format("%Y%m%d%H%M%S %z"),
-                    stop = day_end.format("%Y%m%d%H%M%S %z"),
+                    start = format_xmltv_time(&day_start),
+                    stop = format_xmltv_time(&day_end),
                     id = escape_xml(&channel_id),
                     category = category_element,
                     name = escape_xml(channel_name),
@@ -88,9 +93,6 @@ pub async fn generate_epg(
             }
         } else {
             for programme in &entry.programmes {
-                let start_formatted = format_xmltv_time(&programme.start_time);
-                let stop_formatted = format_xmltv_time(&programme.end_time);
-
                 let desc_element = programme
                     .description
                     .as_ref()
@@ -140,8 +142,8 @@ pub async fn generate_epg(
                      {episode}\
                      {icon}\
                      \x20 </programme>\n",
-                    start = start_formatted,
-                    stop = stop_formatted,
+                    start = format_xmltv_time(&programme.start_time),
+                    stop = format_xmltv_time(&programme.end_time),
                     id = escape_xml(&channel_id),
                     title = escape_xml(&programme.title),
                     lang = lang_attr,
@@ -172,35 +174,4 @@ pub fn escape_xml(s: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
-}
-
-/// Convert ISO 8601 timestamp to XMLTV format (YYYYMMDDHHmmSS +0000).
-fn format_xmltv_time(iso_time: &str) -> String {
-    let trimmed = iso_time.trim();
-
-    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(trimmed) {
-        return dt.format("%Y%m%d%H%M%S %z").to_string();
-    }
-
-    if trimmed.as_bytes().iter().all(u8::is_ascii_digit) {
-        match trimmed.len() {
-            13.. => {
-                if let Ok(ms) = trimmed.parse::<i64>()
-                    && let Some(dt) = Utc.timestamp_millis_opt(ms).single()
-                {
-                    return dt.format("%Y%m%d%H%M%S %z").to_string();
-                }
-            }
-            10..=12 => {
-                if let Ok(secs) = trimmed.parse::<i64>()
-                    && let Some(dt) = Utc.timestamp_opt(secs, 0).single()
-                {
-                    return dt.format("%Y%m%d%H%M%S %z").to_string();
-                }
-            }
-            _ => {}
-        }
-    }
-
-    trimmed.to_string()
 }

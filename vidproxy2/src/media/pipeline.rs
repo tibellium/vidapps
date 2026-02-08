@@ -68,8 +68,10 @@ impl ChannelPipeline {
     }
 
     pub fn record_activity(&self) {
-        self.last_activity
-            .store(crate::util::time::now(), Ordering::Relaxed);
+        self.last_activity.store(
+            crate::util::time::now().timestamp() as u64,
+            Ordering::Relaxed,
+        );
     }
 
     pub fn seconds_since_activity(&self) -> u64 {
@@ -77,7 +79,7 @@ impl ChannelPipeline {
         if last == 0 {
             return 0;
         }
-        crate::util::time::now().saturating_sub(last)
+        (crate::util::time::now().timestamp() as u64).saturating_sub(last)
     }
 
     pub async fn update_stream_info(&self, info: StreamInfo) {

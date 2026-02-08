@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use chrono::{DateTime, Utc};
 use tokio::sync::Notify;
 
 use super::types::{ChannelContentState, ChannelEntry, ChannelId, SourceState, StreamInfo};
@@ -9,8 +10,8 @@ use super::types::{ChannelContentState, ChannelEntry, ChannelId, SourceState, St
 /// In-memory registry of all discovered channels.
 pub struct ChannelRegistry {
     channels: RwLock<HashMap<ChannelId, ChannelEntry>>,
-    discovery_expiration: RwLock<HashMap<String, Option<u64>>>,
-    metadata_expiration: RwLock<HashMap<String, Option<u64>>>,
+    discovery_expiration: RwLock<HashMap<String, Option<DateTime<Utc>>>>,
+    metadata_expiration: RwLock<HashMap<String, Option<DateTime<Utc>>>>,
     source_state: RwLock<HashMap<String, SourceState>>,
     source_notify: RwLock<HashMap<String, Arc<Notify>>>,
     channel_content_state: RwLock<HashMap<ChannelId, ChannelContentState>>,
@@ -104,7 +105,7 @@ impl ChannelRegistry {
         &self,
         source_name: &str,
         channels: Vec<ChannelEntry>,
-        discovery_expires_at: Option<u64>,
+        discovery_expires_at: Option<DateTime<Utc>>,
     ) {
         {
             let mut registry = self.channels.write().unwrap();
@@ -183,7 +184,7 @@ impl ChannelRegistry {
 
     // ── Metadata expiration ──────────────────────────────────────────────
 
-    pub fn set_metadata_expiration(&self, source: &str, expires_at: Option<u64>) {
+    pub fn set_metadata_expiration(&self, source: &str, expires_at: Option<DateTime<Utc>>) {
         let mut expirations = self.metadata_expiration.write().unwrap();
         expirations.insert(source.to_string(), expires_at);
     }
