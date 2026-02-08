@@ -30,10 +30,16 @@ pub enum Step {
         extract: HashMap<String, Extractor>,
     },
 
-    /// Fetch a URL via HTTP (no browser context).
+    /// Fetch one or more URLs via HTTP (no browser context).
+    ///
+    /// When `urls` is provided, each URL is fetched and array results are
+    /// merged — like `SniffMany` but with explicit URLs.
     Fetch {
         name: String,
-        url: String,
+        #[serde(default)]
+        url: Option<String>,
+        #[serde(default)]
+        urls: Option<Vec<String>>,
         #[serde(default)]
         headers: HashMap<String, String>,
         extract: HashMap<String, Extractor>,

@@ -92,10 +92,33 @@ pub async fn execute_steps(
             } => execute_sniff_many(request, extractors, &mut requests, &output.context).await?,
             Step::Fetch {
                 url,
+                urls,
                 headers,
                 extract: extractors,
                 ..
-            } => execute_fetch(url, headers, extractors, &output.context, &http_client).await?,
+            } => {
+                let resolved_urls = match (url, urls) {
+                    (_, Some(urls)) => urls
+                        .iter()
+                        .map(|u| output.context.interpolate(u))
+                        .collect::<Result<Vec<_>>>()?,
+                    (Some(url), None) => vec![output.context.interpolate(url)?],
+                    (None, None) => {
+                        return Err(anyhow!(
+                            "Fetch step '{}' has neither 'url' nor 'urls'",
+                            step_name
+                        ));
+                    }
+                };
+                execute_fetch(
+                    &resolved_urls,
+                    headers,
+                    extractors,
+                    &output.context,
+                    &http_client,
+                )
+                .await?
+            }
             Step::FetchInBrowser {
                 url,
                 extract: extractors,
@@ -324,16 +347,71 @@ async fn execute_sniff_many(
 }
 
 async fn execute_fetch(
-    url_template: &str,
+    urls: &[String],
     step_headers: &HashMap<String, String>,
     extractors: &HashMap<String, Extractor>,
     context: &InterpolationContext,
     http_client: &Client,
 ) -> Result<StepResult> {
-    let url = context.interpolate(url_template)?;
+    let has_array = extractors.values().any(|e| is_array_extractor(&e.kind));
+
+    // Single URL — simple path, supports both scalar and array extraction
+    if urls.len() == 1 {
+        let body = fetch_one(&urls[0], step_headers, context, http_client).await?;
+        return run_extractors(extractors, &body, &urls[0], None, has_array, context);
+    }
+
+    // Multiple URLs — fetch all concurrently and merge array results
+    if !has_array {
+        return Err(anyhow!(
+            "Fetch with multiple urls requires an array extractor"
+        ));
+    }
+
+    let array_extractor = extractors.iter().find(|(_, e)| is_array_extractor(&e.kind));
+    let (array_name, array_extractor) = match array_extractor {
+        Some((name, ext)) => (name.clone(), interpolate_extractor(ext, context)?),
+        None => return Err(anyhow!("No array extractor found")),
+    };
+
+    let fetches = urls
+        .iter()
+        .map(|url| fetch_one(url, step_headers, context, http_client));
+    let results = futures::future::join_all(fetches).await;
+
+    let mut all_items: ExtractedArray = Vec::new();
+    for (i, result) in results.into_iter().enumerate() {
+        let body = result?;
+        let items = extract_array(&array_extractor, &body)?;
+        println!(
+            "[executor] Extracted {} items from {} ({})",
+            items.len(),
+            array_name,
+            urls[i]
+        );
+        all_items.extend(items);
+    }
+
+    println!(
+        "[executor] Total {} items from {} URLs",
+        all_items.len(),
+        urls.len()
+    );
+    Ok(StepResult::Array {
+        name: array_name,
+        items: all_items,
+    })
+}
+
+async fn fetch_one(
+    url: &str,
+    step_headers: &HashMap<String, String>,
+    context: &InterpolationContext,
+    http_client: &Client,
+) -> Result<String> {
     println!("[executor] Fetching: {}", url);
 
-    let mut request = http_client.get(&url).header("User-Agent", FETCH_USER_AGENT);
+    let mut request = http_client.get(url).header("User-Agent", FETCH_USER_AGENT);
 
     for (key, value_template) in step_headers {
         let value = context.interpolate(value_template)?;
@@ -361,9 +439,7 @@ async fn execute_fetch(
         .map_err(|e| anyhow!("Failed to read response body: {}", e))?;
 
     println!("[executor] Fetched {} bytes", body.len());
-
-    let has_array = extractors.values().any(|e| is_array_extractor(&e.kind));
-    run_extractors(extractors, &body, &url, None, has_array, context)
+    Ok(body)
 }
 
 async fn execute_fetch_in_browser(

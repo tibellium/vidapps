@@ -55,7 +55,7 @@ metadata:
   headless: true
 
   outputs:
-    programmes: "${{schedule_0.programmes}}"
+    programmes: "${{get_schedule.programmes}}"
     expires_in: 3600
 
   steps:
@@ -82,106 +82,17 @@ metadata:
           path: "$.pageProps.page.extra_info.principal_signal"
 
     # Fetch all 7 days from the public schedule API.
-    # Multiple steps producing the same array name ("programmes") are merged.
-    - name: "schedule_0"
+    # Multiple URLs are fetched and array results are merged automatically.
+    - name: "get_schedule"
       kind: Fetch
-      url: "https://api.canal1.com.co/api/schedules/0"
-      extract:
-        programmes:
-          kind: jsonpath_array
-          path: "$[*]"
-          each:
-            channel_id: "const:${{get_live_json.principal_signal}}"
-            title: "$.name"
-            description: "$.descriptionShow|$.description"
-            start_time: "$.dateTime"
-            end_time: "$.dateFinishTime"
-            image: "$.featured_image.url"
-            is_live: "$.isLiveWeb"
-
-    - name: "schedule_1"
-      kind: Fetch
-      url: "https://api.canal1.com.co/api/schedules/1"
-      extract:
-        programmes:
-          kind: jsonpath_array
-          path: "$[*]"
-          each:
-            channel_id: "const:${{get_live_json.principal_signal}}"
-            title: "$.name"
-            description: "$.descriptionShow|$.description"
-            start_time: "$.dateTime"
-            end_time: "$.dateFinishTime"
-            image: "$.featured_image.url"
-            is_live: "$.isLiveWeb"
-
-    - name: "schedule_2"
-      kind: Fetch
-      url: "https://api.canal1.com.co/api/schedules/2"
-      extract:
-        programmes:
-          kind: jsonpath_array
-          path: "$[*]"
-          each:
-            channel_id: "const:${{get_live_json.principal_signal}}"
-            title: "$.name"
-            description: "$.descriptionShow|$.description"
-            start_time: "$.dateTime"
-            end_time: "$.dateFinishTime"
-            image: "$.featured_image.url"
-            is_live: "$.isLiveWeb"
-
-    - name: "schedule_3"
-      kind: Fetch
-      url: "https://api.canal1.com.co/api/schedules/3"
-      extract:
-        programmes:
-          kind: jsonpath_array
-          path: "$[*]"
-          each:
-            channel_id: "const:${{get_live_json.principal_signal}}"
-            title: "$.name"
-            description: "$.descriptionShow|$.description"
-            start_time: "$.dateTime"
-            end_time: "$.dateFinishTime"
-            image: "$.featured_image.url"
-            is_live: "$.isLiveWeb"
-
-    - name: "schedule_4"
-      kind: Fetch
-      url: "https://api.canal1.com.co/api/schedules/4"
-      extract:
-        programmes:
-          kind: jsonpath_array
-          path: "$[*]"
-          each:
-            channel_id: "const:${{get_live_json.principal_signal}}"
-            title: "$.name"
-            description: "$.descriptionShow|$.description"
-            start_time: "$.dateTime"
-            end_time: "$.dateFinishTime"
-            image: "$.featured_image.url"
-            is_live: "$.isLiveWeb"
-
-    - name: "schedule_5"
-      kind: Fetch
-      url: "https://api.canal1.com.co/api/schedules/5"
-      extract:
-        programmes:
-          kind: jsonpath_array
-          path: "$[*]"
-          each:
-            channel_id: "const:${{get_live_json.principal_signal}}"
-            title: "$.name"
-            description: "$.descriptionShow|$.description"
-            start_time: "$.dateTime"
-            end_time: "$.dateFinishTime"
-            image: "$.featured_image.url"
-            is_live: "$.isLiveWeb"
-
-    - name: "schedule_6"
-      kind: Fetch
-      url: "https://api.canal1.com.co/api/schedules/6"
+      urls:
+        - "https://api.canal1.com.co/api/schedules/0"
+        - "https://api.canal1.com.co/api/schedules/1"
+        - "https://api.canal1.com.co/api/schedules/2"
+        - "https://api.canal1.com.co/api/schedules/3"
+        - "https://api.canal1.com.co/api/schedules/4"
+        - "https://api.canal1.com.co/api/schedules/5"
+        - "https://api.canal1.com.co/api/schedules/6"
       extract:
         programmes:
           kind: jsonpath_array
