@@ -34,6 +34,8 @@ pub enum Step {
     Fetch {
         name: String,
         url: String,
+        #[serde(default)]
+        headers: HashMap<String, String>,
         extract: HashMap<String, Extractor>,
     },
 

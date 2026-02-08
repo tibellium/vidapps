@@ -90,9 +90,10 @@ pub async fn execute_steps(
             } => execute_sniff_many(request, extractors, &mut requests, &output.context).await?,
             Step::Fetch {
                 url,
+                headers,
                 extract: extractors,
                 ..
-            } => execute_fetch(url, extractors, &output.context, &http_client).await?,
+            } => execute_fetch(url, headers, extractors, &output.context, &http_client).await?,
             Step::FetchInBrowser {
                 url,
                 extract: extractors,
@@ -322,6 +323,7 @@ async fn execute_sniff_many(
 
 async fn execute_fetch(
     url_template: &str,
+    step_headers: &HashMap<String, String>,
     extractors: &HashMap<String, Extractor>,
     context: &InterpolationContext,
     http_client: &Client,
@@ -329,9 +331,16 @@ async fn execute_fetch(
     let url = context.interpolate(url_template)?;
     println!("[executor] Fetching: {}", url);
 
-    let response = http_client
-        .get(&url)
-        .header("User-Agent", FETCH_USER_AGENT)
+    let mut request = http_client.get(&url).header("User-Agent", FETCH_USER_AGENT);
+
+    for (key, value_template) in step_headers {
+        let value = context.interpolate(value_template)?;
+        if !value.trim().is_empty() {
+            request = request.header(key.as_str(), value);
+        }
+    }
+
+    let response = request
         .send()
         .await
         .map_err(|e| anyhow!("HTTP request failed for '{}': {}", url, e))?;

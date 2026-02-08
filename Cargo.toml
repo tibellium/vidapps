@@ -13,14 +13,14 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
-chrome-browser = { git = "https://github.com/tibellium/crates", rev = "f052a8d18fa204211d71d84f546b4b66eb5719e0" }
-drm-widevine = { git = "https://github.com/tibellium/crates", rev = "f052a8d18fa204211d71d84f546b4b66eb5719e0" }
-ffmpeg-types = { git = "https://github.com/tibellium/crates", rev = "f052a8d18fa204211d71d84f546b4b66eb5719e0" }
-ffmpeg-source = { git = "https://github.com/tibellium/crates", rev = "f052a8d18fa204211d71d84f546b4b66eb5719e0" }
-ffmpeg-decode = { git = "https://github.com/tibellium/crates", rev = "f052a8d18fa204211d71d84f546b4b66eb5719e0" }
-ffmpeg-transform = { git = "https://github.com/tibellium/crates", rev = "f052a8d18fa204211d71d84f546b4b66eb5719e0" }
-ffmpeg-encode = { git = "https://github.com/tibellium/crates", rev = "f052a8d18fa204211d71d84f546b4b66eb5719e0" }
-ffmpeg-sink = { git = "https://github.com/tibellium/crates", rev = "f052a8d18fa204211d71d84f546b4b66eb5719e0" }
+chrome-browser = { git = "https://github.com/tibellium/crates", rev = "4cf3d84f00f6e71c2be8a6a86394d77233a84a48" }
+drm-widevine = { git = "https://github.com/tibellium/crates", rev = "4cf3d84f00f6e71c2be8a6a86394d77233a84a48" }
+ffmpeg-types = { git = "https://github.com/tibellium/crates", rev = "4cf3d84f00f6e71c2be8a6a86394d77233a84a48" }
+ffmpeg-source = { git = "https://github.com/tibellium/crates", rev = "4cf3d84f00f6e71c2be8a6a86394d77233a84a48" }
+ffmpeg-decode = { git = "https://github.com/tibellium/crates", rev = "4cf3d84f00f6e71c2be8a6a86394d77233a84a48" }
+ffmpeg-transform = { git = "https://github.com/tibellium/crates", rev = "4cf3d84f00f6e71c2be8a6a86394d77233a84a48" }
+ffmpeg-encode = { git = "https://github.com/tibellium/crates", rev = "4cf3d84f00f6e71c2be8a6a86394d77233a84a48" }
+ffmpeg-sink = { git = "https://github.com/tibellium/crates", rev = "4cf3d84f00f6e71c2be8a6a86394d77233a84a48" }
 
 [profile.release]
 opt-level = 3
