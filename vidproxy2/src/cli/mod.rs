@@ -3,9 +3,11 @@ use clap::{Parser, Subcommand};
 
 mod list_sources;
 mod serve;
+mod test_source;
 
 pub use list_sources::ListSourcesCommand;
 pub use serve::ServeCommand;
+pub use test_source::TestSourceCommand;
 
 #[derive(Parser, Debug)]
 #[command(name = "vidproxy")]
@@ -21,6 +23,8 @@ pub enum Command {
     Serve(ServeCommand),
     /// List available sources and exit
     ListSources(ListSourcesCommand),
+    /// Test a source by running all phases and printing results
+    TestSource(TestSourceCommand),
 }
 
 impl Args {
@@ -32,6 +36,7 @@ impl Args {
         match command {
             Command::Serve(cmd) => cmd.run().await,
             Command::ListSources(cmd) => cmd.run().await,
+            Command::TestSource(cmd) => cmd.run().await,
         }
     }
 }

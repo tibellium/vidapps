@@ -193,7 +193,7 @@ pub fn load_all() -> Result<Vec<Manifest>> {
 }
 
 /// Find a source manifest by ID (case-insensitive, partial match).
-pub fn _find_by_id(id: &str) -> Result<Manifest> {
+pub fn find_by_id(id: &str) -> Result<Manifest> {
     let manifests = load_all()?;
     let id_lower = id.to_lowercase();
 
@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_find_by_id() {
-        let manifest = _find_by_id("caracol").expect("Failed to find caracol");
+        let manifest = find_by_id("caracol").expect("Failed to find caracol");
         assert_eq!(manifest.source.id, "caracol");
         assert_eq!(manifest.source.name, "Caracol TV");
     }
