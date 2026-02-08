@@ -3,7 +3,7 @@ use clap::Parser;
 
 use crate::channel::{
     content::execute_content, discovery::execute_discovery, metadata::execute_metadata,
-    process::apply_process_phase,
+    process::apply_process_phase, types::ChannelEntry,
 };
 use crate::engine::browser::create_browser_for_phase;
 
@@ -81,6 +81,7 @@ impl TestSourceCommand {
         }
 
         // --- Metadata phase ---
+        let mut channel_programmes = std::collections::HashMap::new();
         if let Some(metadata_phase) = &manifest.metadata {
             println!();
             println!("=== Metadata Phase ===");
@@ -132,6 +133,8 @@ impl TestSourceCommand {
                             println!("    ... and {} more", programmes.len() - 3);
                         }
                     }
+
+                    channel_programmes = result.programmes_by_channel;
                 }
                 Err(e) => {
                     println!("  FAILED: {}", e);
@@ -140,6 +143,62 @@ impl TestSourceCommand {
 
             drop(tab);
             drop(browser);
+        }
+
+        // --- Live check ---
+        println!();
+        println!("=== Live Check ===");
+        let now = crate::util::time::now();
+        for ch in &channels {
+            let programmes = channel_programmes.remove(&ch.id).unwrap_or_default();
+            let entry = ChannelEntry {
+                channel: ch.clone(),
+                stream_info: None,
+                programmes,
+                last_error: None,
+            };
+
+            let label = ch.name.as_deref().unwrap_or(&ch.id);
+            let current_prog = entry
+                .programmes
+                .iter()
+                .find(|p| p.start_time <= now && now < p.end_time);
+
+            let available = entry.is_live_now();
+            match current_prog {
+                Some(prog) => {
+                    let tag = if available { "LIVE" } else { "OFFLINE" };
+                    println!(
+                        "  {} [{}] — now playing: {} ({} -> {})",
+                        label,
+                        tag,
+                        prog.title,
+                        prog.start_time.format("%H:%M"),
+                        prog.end_time.format("%H:%M"),
+                    );
+                }
+                None => {
+                    let tag = if available { "LIVE" } else { "OFFLINE" };
+                    let schedule_range = if let (Some(first), Some(last)) =
+                        (entry.programmes.first(), entry.programmes.last())
+                    {
+                        format!(
+                            "schedule covers {} -> {}",
+                            first.start_time.format("%Y-%m-%d %H:%M"),
+                            last.end_time.format("%Y-%m-%d %H:%M"),
+                        )
+                    } else {
+                        "no programmes".to_string()
+                    };
+                    println!(
+                        "  {} [{}] — no current programme (now: {}, {})",
+                        label,
+                        tag,
+                        now.format("%Y-%m-%d %H:%M"),
+                        schedule_range,
+                    );
+                }
+            }
         }
 
         // --- Content phase ---

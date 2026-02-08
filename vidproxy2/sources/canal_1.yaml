@@ -55,10 +55,11 @@ metadata:
   headless: true
 
   outputs:
-    programmes: "${{get_schedule.programmes}}"
+    programmes: "${{schedule_0.programmes}}"
     expires_in: 3600
 
   steps:
+    # We need the channel ID from discovery to tag programmes
     - name: "go_to_livetv"
       kind: Navigate
       url: "https://www.canal1.com.co/senal-en-vivo/"
@@ -80,13 +81,111 @@ metadata:
           kind: jsonpath
           path: "$.pageProps.page.extra_info.principal_signal"
 
-    - name: "get_schedule"
+    # Fetch all 7 days from the public schedule API.
+    # Multiple steps producing the same array name ("programmes") are merged.
+    - name: "schedule_0"
       kind: Fetch
-      url: "https://www.canal1.com.co/_next/data/${{get_build_id.build_id}}/senal-en-vivo.json"
+      url: "https://api.canal1.com.co/api/schedules/0"
       extract:
         programmes:
           kind: jsonpath_array
-          path: "$.pageProps.schedule[*]"
+          path: "$[*]"
+          each:
+            channel_id: "const:${{get_live_json.principal_signal}}"
+            title: "$.name"
+            description: "$.descriptionShow|$.description"
+            start_time: "$.dateTime"
+            end_time: "$.dateFinishTime"
+            image: "$.featured_image.url"
+            is_live: "$.isLiveWeb"
+
+    - name: "schedule_1"
+      kind: Fetch
+      url: "https://api.canal1.com.co/api/schedules/1"
+      extract:
+        programmes:
+          kind: jsonpath_array
+          path: "$[*]"
+          each:
+            channel_id: "const:${{get_live_json.principal_signal}}"
+            title: "$.name"
+            description: "$.descriptionShow|$.description"
+            start_time: "$.dateTime"
+            end_time: "$.dateFinishTime"
+            image: "$.featured_image.url"
+            is_live: "$.isLiveWeb"
+
+    - name: "schedule_2"
+      kind: Fetch
+      url: "https://api.canal1.com.co/api/schedules/2"
+      extract:
+        programmes:
+          kind: jsonpath_array
+          path: "$[*]"
+          each:
+            channel_id: "const:${{get_live_json.principal_signal}}"
+            title: "$.name"
+            description: "$.descriptionShow|$.description"
+            start_time: "$.dateTime"
+            end_time: "$.dateFinishTime"
+            image: "$.featured_image.url"
+            is_live: "$.isLiveWeb"
+
+    - name: "schedule_3"
+      kind: Fetch
+      url: "https://api.canal1.com.co/api/schedules/3"
+      extract:
+        programmes:
+          kind: jsonpath_array
+          path: "$[*]"
+          each:
+            channel_id: "const:${{get_live_json.principal_signal}}"
+            title: "$.name"
+            description: "$.descriptionShow|$.description"
+            start_time: "$.dateTime"
+            end_time: "$.dateFinishTime"
+            image: "$.featured_image.url"
+            is_live: "$.isLiveWeb"
+
+    - name: "schedule_4"
+      kind: Fetch
+      url: "https://api.canal1.com.co/api/schedules/4"
+      extract:
+        programmes:
+          kind: jsonpath_array
+          path: "$[*]"
+          each:
+            channel_id: "const:${{get_live_json.principal_signal}}"
+            title: "$.name"
+            description: "$.descriptionShow|$.description"
+            start_time: "$.dateTime"
+            end_time: "$.dateFinishTime"
+            image: "$.featured_image.url"
+            is_live: "$.isLiveWeb"
+
+    - name: "schedule_5"
+      kind: Fetch
+      url: "https://api.canal1.com.co/api/schedules/5"
+      extract:
+        programmes:
+          kind: jsonpath_array
+          path: "$[*]"
+          each:
+            channel_id: "const:${{get_live_json.principal_signal}}"
+            title: "$.name"
+            description: "$.descriptionShow|$.description"
+            start_time: "$.dateTime"
+            end_time: "$.dateFinishTime"
+            image: "$.featured_image.url"
+            is_live: "$.isLiveWeb"
+
+    - name: "schedule_6"
+      kind: Fetch
+      url: "https://api.canal1.com.co/api/schedules/6"
+      extract:
+        programmes:
+          kind: jsonpath_array
+          path: "$[*]"
           each:
             channel_id: "const:${{get_live_json.principal_signal}}"
             title: "$.name"

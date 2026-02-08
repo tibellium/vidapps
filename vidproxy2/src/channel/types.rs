@@ -90,7 +90,14 @@ impl ChannelEntry {
 
         match current {
             Some(prog) => prog.is_live.unwrap_or(true),
-            None => true,
+            None => {
+                // No programme covers "now". If any programme in the schedule has
+                // `is_live` data, this source provides availability info — assume
+                // offline rather than blindly assuming live. This handles the case
+                // where the schedule is stale / expired (e.g. yesterday's schedule).
+                let has_live_info = self.programmes.iter().any(|p| p.is_live.is_some());
+                !has_live_info
+            }
         }
     }
 }

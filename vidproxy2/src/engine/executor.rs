@@ -28,6 +28,10 @@ enum StepResult {
 }
 
 /// Store a step's result into the phase output.
+///
+/// Arrays are keyed by output name only (not step name), so multiple steps
+/// producing the same array name will merge their items — consistent with
+/// how `SniffMany` accumulates items across multiple network responses.
 fn store_result(output: &mut PhaseOutput, step_name: &str, result: StepResult) {
     match result {
         StepResult::Single(values) => {
@@ -36,9 +40,7 @@ fn store_result(output: &mut PhaseOutput, step_name: &str, result: StepResult) {
             }
         }
         StepResult::Array { name, items } => {
-            output
-                .arrays
-                .insert(format!("{}.{}", step_name, name), items);
+            output.arrays.entry(name).or_default().extend(items);
         }
         StepResult::Empty => {}
     }
